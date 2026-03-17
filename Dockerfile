@@ -11,9 +11,8 @@ COPY src ./src
 COPY dashboard ./dashboard
 COPY configs ./configs
 
-RUN uv pip install --system ".[dev]"
+RUN uv pip install --system ".[dev,local]"
 
 COPY . .
 
 CMD ["uvicorn", "graphrag_engine.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
-

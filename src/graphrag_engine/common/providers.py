@@ -9,6 +9,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from .artifacts import ensure_dir
 from .hashing import stable_hash
 from .models import ChunkRecord
@@ -89,6 +91,13 @@ def _first_json_object(text: str) -> dict[str, Any] | None:
 
 def _local_stack_available() -> bool:
     return AutoTokenizer is not None and pipeline is not None and SentenceTransformer is not None
+
+
+def _join_url(base_url: str, *parts: str) -> str:
+    url = base_url.rstrip("/")
+    for part in parts:
+        url = f"{url}/{part.strip('/')}"
+    return url
 
 
 class LLMProvider(ABC):
@@ -325,13 +334,16 @@ class LocalTransformersProvider(HeuristicLLMProvider):
 
     def __init__(self, settings: Settings) -> None:
         super().__init__(settings)
-        if not _local_stack_available():  # pragma: no cover - optional dependency
-            raise RuntimeError("transformers and sentence-transformers are required for local model support")
         self._tokenizer = None
         self._generator = None
         self._embedder = None
-        self._generator_disabled_reason: str | None = None
-        self._embedder_disabled_reason: str | None = None
+        local_stack_missing = not _local_stack_available()
+        self._generator_disabled_reason: str | None = (
+            "transformers and sentence-transformers are not installed" if local_stack_missing else None
+        )
+        self._embedder_disabled_reason: str | None = (
+            "transformers and sentence-transformers are not installed" if local_stack_missing else None
+        )
         self._hf_home = self._configure_cache_environment()
         self._local_model_root = ensure_dir(self._hf_home / "local_models")
         self._materialized_models: dict[str, Path] = {}
@@ -570,6 +582,261 @@ class LocalTransformersProvider(HeuristicLLMProvider):
         return re.sub(r"[^A-Za-z0-9._-]+", "--", model_ref).strip("-") or "model"
 
 
+class AnthropicProvider(LocalTransformersProvider):
+    provider_name = "anthropic"
+
+    def describe(self) -> dict[str, Any]:
+        payload = super().describe()
+        payload.update(
+            {
+                "provider": self.provider_name,
+                "model": self.settings.anthropic_model,
+                "base_url": self.settings.anthropic_base_url,
+            }
+        )
+        return payload
+
+    def extract_structured_knowledge(self, chunk: ChunkRecord) -> dict[str, Any]:
+        prompt = (
+            "Extract entities and relations from the following regulatory text. "
+            "Return strict JSON with top-level keys entities and relations.\n\n"
+            f"{chunk.text[:3500]}"
+        )
+        try:
+            generated = self._call_messages(
+                system_prompt="You extract structured legal knowledge and only return valid JSON.",
+                user_prompt=prompt,
+            )
+            payload = _first_json_object(generated)
+            if payload:
+                return payload
+        except Exception:
+            pass
+        return super().extract_structured_knowledge(chunk)
+
+    def rewrite_query(self, question: str, context: list[str]) -> str:
+        prompt = (
+            "Rewrite this user question for stronger legal retrieval over a regulatory knowledge graph. "
+            "Keep it concise and preserve the meaning.\n\n"
+            f"Question: {question}\nContext: {context[:3]}"
+        )
+        try:
+            rewritten = self._call_messages(
+                system_prompt="You optimize legal retrieval queries.",
+                user_prompt=prompt,
+            ).strip()
+            return rewritten or super().rewrite_query(question, context)
+        except Exception:
+            return super().rewrite_query(question, context)
+
+    def generate_grounded_answer(self, question: str, evidence: list[str]) -> dict[str, Any]:
+        if not evidence:
+            return super().generate_grounded_answer(question, evidence)
+        prompt = (
+            "Answer the question using only the supplied evidence snippets. "
+            "If the evidence is insufficient, say so explicitly.\n\n"
+            f"Question: {question}\n\nEvidence:\n" + "\n\n".join(evidence[:6])
+        )
+        try:
+            answer = self._call_messages(
+                system_prompt="You are a careful regulatory analyst. Stay fully grounded in the evidence.",
+                user_prompt=prompt,
+            ).strip()
+            if answer:
+                return {"answer": answer, "confidence": 0.82, "fallback_used": False}
+        except Exception:
+            pass
+        return super().generate_grounded_answer(question, evidence)
+
+    def _call_messages(self, *, system_prompt: str, user_prompt: str) -> str:
+        if not self.settings.anthropic_api_key:
+            raise RuntimeError("Anthropic API key is not configured")
+        base_url = self.settings.anthropic_base_url.rstrip("/")
+        if base_url.endswith("/v1/messages"):
+            url = base_url
+        elif base_url.endswith("/v1"):
+            url = _join_url(base_url, "messages")
+        else:
+            url = _join_url(base_url, "v1", "messages")
+        response = httpx.post(
+            url,
+            headers={
+                "x-api-key": self.settings.anthropic_api_key,
+                "anthropic-version": self.settings.anthropic_version,
+                "content-type": "application/json",
+            },
+            json={
+                "model": self.settings.anthropic_model,
+                "max_tokens": self.settings.local_max_new_tokens,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            },
+            timeout=90.0,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        text_blocks = [
+            block.get("text", "")
+            for block in payload.get("content", [])
+            if isinstance(block, dict) and block.get("type") == "text"
+        ]
+        return "\n".join(item for item in text_blocks if item).strip()
+
+
+class GeminiProvider(LocalTransformersProvider):
+    provider_name = "gemini"
+
+    def describe(self) -> dict[str, Any]:
+        payload = super().describe()
+        payload.update(
+            {
+                "provider": self.provider_name,
+                "model": self.settings.gemini_model,
+                "embedding_model": self.settings.gemini_embedding_model,
+                "base_url": self.settings.gemini_base_url,
+            }
+        )
+        return payload
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        if not self.settings.gemini_api_key:
+            return super().embed_texts(texts)
+        try:
+            url = _join_url(
+                self.settings.gemini_base_url,
+                "models",
+                f"{self.settings.gemini_embedding_model}:batchEmbedContents",
+            )
+            response = httpx.post(
+                url,
+                headers={
+                    "x-goog-api-key": self.settings.gemini_api_key,
+                    "content-type": "application/json",
+                },
+                json={
+                    "requests": [
+                        {
+                            "model": f"models/{self.settings.gemini_embedding_model}",
+                            "content": {"parts": [{"text": text}]},
+                            "taskType": "SEMANTIC_SIMILARITY",
+                        }
+                        for text in texts
+                    ]
+                },
+                timeout=90.0,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            embeddings = payload.get("embeddings", [])
+            vectors = [self._extract_gemini_embedding(item) for item in embeddings]
+            if vectors and all(vector for vector in vectors):
+                return vectors
+        except Exception:
+            pass
+        return super().embed_texts(texts)
+
+    def extract_structured_knowledge(self, chunk: ChunkRecord) -> dict[str, Any]:
+        prompt = (
+            "Extract entities and relations from the following regulatory text. "
+            "Return strict JSON with top-level keys entities and relations.\n\n"
+            f"{chunk.text[:3500]}"
+        )
+        try:
+            generated = self._call_generate_content(
+                system_prompt="You extract structured legal knowledge and only return valid JSON.",
+                user_prompt=prompt,
+            )
+            payload = _first_json_object(generated)
+            if payload:
+                return payload
+        except Exception:
+            pass
+        return super().extract_structured_knowledge(chunk)
+
+    def rewrite_query(self, question: str, context: list[str]) -> str:
+        prompt = (
+            "Rewrite this user question for stronger legal retrieval over a regulatory knowledge graph. "
+            "Keep it concise and preserve the meaning.\n\n"
+            f"Question: {question}\nContext: {context[:3]}"
+        )
+        try:
+            rewritten = self._call_generate_content(
+                system_prompt="You optimize legal retrieval queries.",
+                user_prompt=prompt,
+            ).strip()
+            return rewritten or super().rewrite_query(question, context)
+        except Exception:
+            return super().rewrite_query(question, context)
+
+    def generate_grounded_answer(self, question: str, evidence: list[str]) -> dict[str, Any]:
+        if not evidence:
+            return super().generate_grounded_answer(question, evidence)
+        prompt = (
+            "Answer the question using only the supplied evidence snippets. "
+            "If the evidence is insufficient, say so explicitly.\n\n"
+            f"Question: {question}\n\nEvidence:\n" + "\n\n".join(evidence[:6])
+        )
+        try:
+            answer = self._call_generate_content(
+                system_prompt="You are a careful regulatory analyst. Stay fully grounded in the evidence.",
+                user_prompt=prompt,
+            ).strip()
+            if answer:
+                return {"answer": answer, "confidence": 0.8, "fallback_used": False}
+        except Exception:
+            pass
+        return super().generate_grounded_answer(question, evidence)
+
+    def _call_generate_content(self, *, system_prompt: str, user_prompt: str) -> str:
+        if not self.settings.gemini_api_key:
+            raise RuntimeError("Gemini API key is not configured")
+        url = _join_url(
+            self.settings.gemini_base_url,
+            "models",
+            f"{self.settings.gemini_model}:generateContent",
+        )
+        response = httpx.post(
+            url,
+            headers={
+                "x-goog-api-key": self.settings.gemini_api_key,
+                "content-type": "application/json",
+            },
+            json={
+                "system_instruction": {
+                    "parts": [{"text": system_prompt}],
+                },
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": user_prompt}],
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": self.settings.local_temperature,
+                },
+            },
+            timeout=90.0,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        parts = (
+            payload.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [])
+        )
+        text_parts = [part.get("text", "") for part in parts if isinstance(part, dict)]
+        return "\n".join(item for item in text_parts if item).strip()
+
+    @staticmethod
+    def _extract_gemini_embedding(payload: dict[str, Any]) -> list[float]:
+        if "values" in payload and isinstance(payload["values"], list):
+            return [float(value) for value in payload["values"]]
+        if "embedding" in payload and isinstance(payload["embedding"], dict):
+            values = payload["embedding"].get("values", [])
+            return [float(value) for value in values]
+        return []
+
+
 def build_provider(settings: Settings) -> LLMProvider:
     backend = settings.model_backend.lower().strip()
     if backend == "heuristic":
@@ -578,12 +845,24 @@ def build_provider(settings: Settings) -> LLMProvider:
         if OpenAI is not None and (settings.openai_api_key or settings.openai_base_url):
             return OpenAIProvider(settings)
         return HeuristicLLMProvider(settings)
+    if backend == "anthropic":
+        if settings.anthropic_api_key:
+            return AnthropicProvider(settings)
+        return HeuristicLLMProvider(settings)
+    if backend == "gemini":
+        if settings.gemini_api_key:
+            return GeminiProvider(settings)
+        return HeuristicLLMProvider(settings)
     if backend == "local":
         if _local_stack_available():
             return LocalTransformersProvider(settings)
         return HeuristicLLMProvider(settings)
     if OpenAI is not None and (settings.openai_api_key or settings.openai_base_url):
         return OpenAIProvider(settings)
+    if settings.anthropic_api_key:
+        return AnthropicProvider(settings)
+    if settings.gemini_api_key:
+        return GeminiProvider(settings)
     if _local_stack_available():
         return LocalTransformersProvider(settings)
     return HeuristicLLMProvider(settings)

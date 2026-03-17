@@ -61,6 +61,8 @@ Set `GRAPH_RAG_MODEL_BACKEND` in `.env`:
 - `auto`: prefer OpenAI if credentials/base URL are configured, otherwise prefer local transformers if available, otherwise fall back to deterministic heuristics.
 - `openai`: use the OpenAI SDK. This also works with OpenAI-compatible local servers if you set `GRAPH_RAG_OPENAI_BASE_URL`.
 - `local`: use a local `transformers` chat model plus a `sentence-transformers` embedding model.
+- `anthropic`: use Anthropic Messages API for reasoning/extraction and local or heuristic embeddings.
+- `gemini`: use Gemini REST generation, plus Gemini embeddings when an API key is configured.
 - `heuristic`: no external model calls; useful for smoke tests.
 
 Local defaults are already configured for a Qwen-based setup:
@@ -81,6 +83,51 @@ GRAPH_RAG_MODEL_BACKEND=openai
 GRAPH_RAG_OPENAI_API_KEY=your-key
 GRAPH_RAG_OPENAI_BASE_URL=
 ```
+
+Anthropic usage:
+
+```env
+GRAPH_RAG_MODEL_BACKEND=anthropic
+GRAPH_RAG_ANTHROPIC_API_KEY=your-key
+GRAPH_RAG_ANTHROPIC_MODEL=claude-sonnet-4-20250514
+```
+
+Gemini usage:
+
+```env
+GRAPH_RAG_MODEL_BACKEND=gemini
+GRAPH_RAG_GEMINI_API_KEY=your-key
+GRAPH_RAG_GEMINI_MODEL=gemini-2.5-flash
+GRAPH_RAG_GEMINI_EMBEDDING_MODEL=gemini-embedding-001
+```
+
+`auto` now prefers backends in this order when credentials are available: `openai -> anthropic -> gemini -> local -> heuristic`.
+
+## API and deployment health
+
+The API now exposes:
+
+- `GET /health/live`: liveness probe
+- `GET /health/ready`: readiness probe with provider, artifact counts, and Neo4j status
+- `GET /v1/system/status`: runtime summary for dashboards or deployment checks
+
+Docker Compose includes service health checks for Neo4j, the API, and the Streamlit dashboard. Once the graph artifacts exist, you can verify the stack with:
+
+```powershell
+docker compose up --build
+curl http://localhost:8000/health/ready
+curl http://localhost:8000/v1/system/status
+```
+
+## Benchmark status
+
+The current repo already contains a real evaluation output under `data/processed/evaluation/`. The latest benchmark run compares 54 baseline vs GraphRAG cases and stores the aggregate metrics in JSON so the dashboard can visualize them.
+
+When `GRAPH_RAG_MODEL_BACKEND=local`, the evaluator keeps the real retriever but uses the lightweight heuristic reasoning provider for the benchmark loop so the full suite remains practical on consumer hardware. Interactive querying still uses the configured local chat model.
+
+## Release checklist
+
+Use [docs/release_checklist.md](docs/release_checklist.md) before calling the project ready for a portfolio or deployment milestone.
 
 ## Development notes
 

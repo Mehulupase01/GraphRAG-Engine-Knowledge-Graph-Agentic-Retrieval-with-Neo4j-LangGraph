@@ -17,6 +17,14 @@ class Settings(BaseModel):
     chat_model: str = "gpt-4.1-mini"
     embedding_model: str = "text-embedding-3-large"
     judge_model: str = "gpt-4.1-mini"
+    anthropic_api_key: str = ""
+    anthropic_base_url: str = "https://api.anthropic.com"
+    anthropic_model: str = "claude-sonnet-4-20250514"
+    anthropic_version: str = "2023-06-01"
+    gemini_api_key: str = ""
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_embedding_model: str = "gemini-embedding-001"
     local_chat_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     local_embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     local_device: str = "auto"
@@ -83,6 +91,14 @@ class Settings(BaseModel):
             chat_model=get("GRAPH_RAG_CHAT_MODEL", "gpt-4.1-mini"),
             embedding_model=get("GRAPH_RAG_EMBEDDING_MODEL", "text-embedding-3-large"),
             judge_model=get("GRAPH_RAG_JUDGE_MODEL", "gpt-4.1-mini"),
+            anthropic_api_key=get("GRAPH_RAG_ANTHROPIC_API_KEY", ""),
+            anthropic_base_url=get("GRAPH_RAG_ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+            anthropic_model=get("GRAPH_RAG_ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
+            anthropic_version=get("GRAPH_RAG_ANTHROPIC_VERSION", "2023-06-01"),
+            gemini_api_key=get("GRAPH_RAG_GEMINI_API_KEY", ""),
+            gemini_base_url=get("GRAPH_RAG_GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"),
+            gemini_model=get("GRAPH_RAG_GEMINI_MODEL", "gemini-2.5-flash"),
+            gemini_embedding_model=get("GRAPH_RAG_GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
             local_chat_model=get("GRAPH_RAG_LOCAL_CHAT_MODEL", "Qwen/Qwen2.5-1.5B-Instruct"),
             local_embedding_model=get(
                 "GRAPH_RAG_LOCAL_EMBEDDING_MODEL",

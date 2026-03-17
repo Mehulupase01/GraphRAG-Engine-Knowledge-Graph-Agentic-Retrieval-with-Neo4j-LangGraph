@@ -31,5 +31,9 @@ jobs:
       - name: Compile sources
         env:
           PYTHONPATH: src
-        run: python -m compileall src tests
+        run: python -m compileall dashboard src tests
 
+      - name: Runtime doctor
+        env:
+          PYTHONPATH: src
+        run: python -m graphrag_engine.cli.main doctor

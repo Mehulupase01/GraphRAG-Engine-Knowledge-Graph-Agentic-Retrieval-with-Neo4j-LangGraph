@@ -53,3 +53,12 @@ def configure_logging(level: str = "INFO") -> None:
     handler.setFormatter(JsonFormatter())
     root.addHandler(handler)
 
+    # Keep third-party runtime chatter from overwhelming CLI, tests, and container logs.
+    for logger_name in (
+        "httpx",
+        "httpcore",
+        "sentence_transformers",
+        "transformers",
+        "neo4j.notifications",
+    ):
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
