@@ -453,9 +453,9 @@ class LocalTransformersProvider(HeuristicLLMProvider):
                 }
                 if torch is not None:
                     if self._resolve_generation_device() != -1:
-                        model_kwargs["torch_dtype"] = getattr(torch, "float16", None) or getattr(torch, "float32")
+                        model_kwargs["dtype"] = getattr(torch, "float16", None) or getattr(torch, "float32")
                     else:
-                        model_kwargs["torch_dtype"] = getattr(torch, "float32")
+                        model_kwargs["dtype"] = getattr(torch, "float32")
                 model = AutoModelForCausalLM.from_pretrained(
                     model_path,
                     **model_kwargs,
@@ -549,7 +549,11 @@ class LocalTransformersProvider(HeuristicLLMProvider):
             return model_ref
 
         target_dir = ensure_dir(self._local_model_root / category / self._slugify_model_ref(model_ref))
-        snapshot_download(repo_id=model_ref, local_dir=str(target_dir))
+        snapshot_download(
+            repo_id=model_ref,
+            local_dir=str(target_dir),
+            cache_dir=str(self._hf_home / "hub"),
+        )
         self._materialized_models[model_ref] = target_dir
         return str(target_dir)
 

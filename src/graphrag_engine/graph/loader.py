@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 
 from graphrag_engine.common.artifacts import read_json, read_jsonl, write_json
@@ -16,6 +17,21 @@ except ImportError:  # pragma: no cover - optional dependency
 LOGGER = logging.getLogger(__name__)
 
 
+def _neo4j_props(payload: dict) -> dict:
+    props: dict = {}
+    for key, value in payload.items():
+        if value is None:
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            props[key] = value
+            continue
+        if isinstance(value, list) and all(isinstance(item, (str, int, float, bool)) or item is None for item in value):
+            props[key] = [item for item in value if item is not None]
+            continue
+        props[f"{key}_json"] = json.dumps(value, ensure_ascii=True, sort_keys=True)
+    return props
+
+
 class GraphLoader:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -28,6 +44,11 @@ class GraphLoader:
         entities = [EntityRecord.model_validate(row) for row in read_jsonl(extraction_dir / "entities.jsonl")]
         relations = [RelationRecord.model_validate(row) for row in read_jsonl(extraction_dir / "relations.jsonl")]
         communities = detect_communities(entities, relations)
+        mentions = [
+            {"chunk_id": chunk_id, "entity_id": entity.entity_id}
+            for entity in entities
+            for chunk_id in entity.metadata.get("mention_chunk_ids", [entity.source_chunk_id])
+        ]
 
         graph_dir = self.settings.processed_data_path / "graph"
         catalog = {
@@ -39,6 +60,7 @@ class GraphLoader:
             ],
             "relations": [relation.model_dump() for relation in relations],
             "communities": communities,
+            "mentions": mentions,
         }
         write_json(graph_dir / "graph_catalog.json", catalog)
 
@@ -58,7 +80,7 @@ class GraphLoader:
                         session.run(
                             "MERGE (d:Document {document_id: $document_id}) SET d += $props",
                             document_id=document.document_id,
-                            props=document.model_dump(),
+                            props=_neo4j_props(document.model_dump()),
                         )
                     for chunk in chunks:
                         session.run(
@@ -71,24 +93,25 @@ class GraphLoader:
                             """,
                             chunk_id=chunk.chunk_id,
                             document_id=chunk.document_id,
-                            props=chunk.model_dump(),
+                            props=_neo4j_props(chunk.model_dump()),
                         )
                     for entity in entities:
-                        entity_payload = entity.model_copy(
-                            update={"metadata": {"community_id": communities.get(entity.entity_id)}}
-                        ).model_dump()
+                        entity_payload = entity.model_dump()
+                        entity_payload["community_id"] = communities.get(entity.entity_id)
                         session.run(
                             "MERGE (e:Entity {entity_id: $entity_id}) SET e += $props",
                             entity_id=entity.entity_id,
-                            props=entity_payload,
+                            props=_neo4j_props(entity_payload),
                         )
                     for relation in relations:
                         session.run(
                             """
-                            MATCH (s:Entity {entity_id: $subject}), (o:Entity {entity_id: $object}), (c:Chunk {chunk_id: $chunk_id})
+                            MATCH (s:Entity {entity_id: $subject}), (o:Entity {entity_id: $object})
                             MERGE (s)-[r:RELATES {relation_id: $relation_id}]->(o)
-                            SET r.relation_type = $relation_type, r.confidence = $confidence, r.evidence = $evidence
-                            MERGE (c)-[:SUPPORTS]->(r)
+                            SET r.relation_type = $relation_type,
+                                r.confidence = $confidence,
+                                r.evidence = $evidence,
+                                r.source_chunk_id = $chunk_id
                             """,
                             subject=relation.subject_entity_id,
                             object=relation.object_entity_id,
@@ -97,6 +120,15 @@ class GraphLoader:
                             relation_type=relation.relation_type,
                             confidence=relation.confidence,
                             evidence=relation.evidence,
+                        )
+                    for mention in mentions:
+                        session.run(
+                            """
+                            MATCH (c:Chunk {chunk_id: $chunk_id}), (e:Entity {entity_id: $entity_id})
+                            MERGE (c)-[:MENTIONS]->(e)
+                            """,
+                            chunk_id=mention["chunk_id"],
+                            entity_id=mention["entity_id"],
                         )
                 used_neo4j = True
                 notes.append("Loaded graph into Neo4j.")
@@ -120,4 +152,3 @@ class GraphLoader:
 
     def load_catalog(self) -> dict:
         return read_json(self.settings.processed_data_path / "graph" / "graph_catalog.json")
-
