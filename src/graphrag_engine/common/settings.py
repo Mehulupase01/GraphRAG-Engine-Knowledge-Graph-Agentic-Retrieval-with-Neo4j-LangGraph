@@ -11,7 +11,7 @@ class Settings(BaseModel):
     env: str = "development"
     data_dir: str = "./data"
     log_level: str = "INFO"
-    model_backend: str = "auto"
+    model_backend: str = "local"
     openai_api_key: str = ""
     openai_base_url: str = ""
     chat_model: str = "gpt-4.1-mini"
@@ -19,7 +19,7 @@ class Settings(BaseModel):
     judge_model: str = "gpt-4.1-mini"
     local_chat_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     local_embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    local_device: str = "cpu"
+    local_device: str = "auto"
     local_max_new_tokens: int = 384
     local_temperature: float = 0.1
     local_trust_remote_code: bool = True
@@ -77,7 +77,7 @@ class Settings(BaseModel):
             env=get("GRAPH_RAG_ENV", "development"),
             data_dir=get("GRAPH_RAG_DATA_DIR", "./data"),
             log_level=get("GRAPH_RAG_LOG_LEVEL", "INFO"),
-            model_backend=get("GRAPH_RAG_MODEL_BACKEND", "auto"),
+            model_backend=get("GRAPH_RAG_MODEL_BACKEND", "local"),
             openai_api_key=get("GRAPH_RAG_OPENAI_API_KEY", ""),
             openai_base_url=get("GRAPH_RAG_OPENAI_BASE_URL", ""),
             chat_model=get("GRAPH_RAG_CHAT_MODEL", "gpt-4.1-mini"),
@@ -88,7 +88,7 @@ class Settings(BaseModel):
                 "GRAPH_RAG_LOCAL_EMBEDDING_MODEL",
                 "sentence-transformers/all-MiniLM-L6-v2",
             ),
-            local_device=get("GRAPH_RAG_LOCAL_DEVICE", "cpu"),
+            local_device=get("GRAPH_RAG_LOCAL_DEVICE", "auto"),
             local_max_new_tokens=int(get("GRAPH_RAG_LOCAL_MAX_NEW_TOKENS", "384")),
             local_temperature=float(get("GRAPH_RAG_LOCAL_TEMPERATURE", "0.1")),
             local_trust_remote_code=get_bool("GRAPH_RAG_LOCAL_TRUST_REMOTE_CODE", True),

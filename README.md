@@ -69,7 +69,7 @@ Local defaults are already configured for a Qwen-based setup:
 GRAPH_RAG_MODEL_BACKEND=local
 GRAPH_RAG_LOCAL_CHAT_MODEL=Qwen/Qwen2.5-1.5B-Instruct
 GRAPH_RAG_LOCAL_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-GRAPH_RAG_LOCAL_DEVICE=cpu
+GRAPH_RAG_LOCAL_DEVICE=auto
 ```
 
 The first time you use the `local` backend, Hugging Face will download the selected models into your local cache. That can take a while on the first run.

@@ -12,7 +12,28 @@ except ImportError:  # pragma: no cover - optional dependency
     PdfReader = None
 
 
-SECTION_HEADING_RE = re.compile(r"^(Article\s+\d+[A-Za-z-]*|Chapter\s+\w+|Section\s+\w+|Title\s+\w+)", re.IGNORECASE)
+SECTION_HEADING_RE = re.compile(
+    r"^(Article\s+\d+[A-Za-z-]*|Chapter\s+\w+|Section\s+\w+|Title\s+\w+|Annex\s+\w+)",
+    re.IGNORECASE,
+)
+HEADING_NORMALIZERS: tuple[tuple[str, str], ...] = (
+    (r"\bA\s*r\s*t\s*i\s*c\s*l\s*e\b", "Article"),
+    (r"\bAr\s*ticle\b", "Article"),
+    (r"\bC\s*h\s*a\s*p\s*t\s*e\s*r\b", "Chapter"),
+    (r"\bChapt\s*er\b", "Chapter"),
+    (r"\bChap\s*ter\b", "Chapter"),
+    (r"\bS\s*e\s*c\s*t\s*i\s*o\s*n\b", "Section"),
+    (r"\bSec\s*tion\b", "Section"),
+    (r"\bT\s*i\s*t\s*l\s*e\b", "Title"),
+    (r"\bAnn\s*ex\b", "Annex"),
+)
+
+
+def _normalize_heading_line(line: str) -> str:
+    normalized = re.sub(r"\s+", " ", line).strip()
+    for pattern, replacement in HEADING_NORMALIZERS:
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+    return normalized
 
 
 def parse_document(path: Path) -> tuple[DocumentRecord, list[str]]:
@@ -69,7 +90,7 @@ def split_into_sections(document: DocumentRecord, pages: list[str]) -> list[Sect
     for page_number, page_text in enumerate(pages, start=1):
         current_page = page_number
         for line in page_text.splitlines():
-            line = line.strip()
+            line = _normalize_heading_line(line)
             if not line:
                 continue
             heading_match = SECTION_HEADING_RE.match(line)
@@ -94,4 +115,3 @@ def split_into_sections(document: DocumentRecord, pages: list[str]) -> list[Sect
             )
         )
     return sections
-

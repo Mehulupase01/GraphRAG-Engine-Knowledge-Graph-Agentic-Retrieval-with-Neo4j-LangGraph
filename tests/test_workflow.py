@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from pathlib import Path
 
 from graphrag_engine.common.artifacts import write_json, write_jsonl
 from graphrag_engine.common.models import ChunkRecord, DocumentRecord, EntityRecord, QueryRequest, RelationRecord
@@ -13,7 +14,9 @@ from graphrag_engine.retrieval.service import HybridRetriever
 
 class WorkflowTests(unittest.TestCase):
     def test_agent_returns_citations(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        scratch_root = Path.cwd() / "data" / "cache" / "test_tmp"
+        scratch_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch_root) as tmp:
             settings = Settings(data_dir=tmp)
             graph_dir = settings.processed_data_path / "graph"
             document = DocumentRecord(document_id="doc-1", name="AI Act", source_path="x", checksum="y")
@@ -65,4 +68,3 @@ class WorkflowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -13,7 +13,9 @@ from graphrag_engine.extraction.service import ExtractionService
 
 class ExtractionTests(unittest.TestCase):
     def test_entity_resolution_merges_aliases(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        scratch_root = Path.cwd() / "data" / "cache" / "test_tmp"
+        scratch_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch_root) as tmp:
             settings = Settings(data_dir=tmp)
             ingestion_dir = settings.processed_data_path / "ingestion"
             chunk = ChunkRecord(
@@ -33,4 +35,3 @@ class ExtractionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
