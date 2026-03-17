@@ -23,6 +23,7 @@ class AnswerGenerator:
                     "text": round(hit.text_score, 4),
                     "vector": round(hit.vector_score, 4),
                     "graph": round(hit.graph_score, 4),
+                    "metadata": round(hit.metadata_score, 4),
                     "fused": round(hit.fused_score, 4),
                 },
             )
@@ -41,4 +42,3 @@ class AnswerGenerator:
             fallback_used=bool(payload.get("fallback_used", False)),
             trace=trace,
         )
-

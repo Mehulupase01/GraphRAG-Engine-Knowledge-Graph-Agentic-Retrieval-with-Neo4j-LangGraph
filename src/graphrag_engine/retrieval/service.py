@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import math
+import re
 from collections import defaultdict
+from dataclasses import dataclass
 
 from graphrag_engine.common.artifacts import read_json
 from graphrag_engine.common.models import ChunkRecord, GraphPath, RetrievalHit
@@ -9,6 +11,83 @@ from graphrag_engine.common.providers import LLMProvider, tokenize
 from graphrag_engine.common.settings import Settings
 
 from .fusion import reciprocal_rank_fusion
+
+DOCUMENT_NAME_MAP = {
+    "celex 32016r0679 en txt": "GDPR",
+    "celex 32022r2065 en txt": "Digital Services Act",
+    "oj l 202401689 en txt": "AI Act",
+}
+ARTICLE_REF_RE = re.compile(r"\bArticle\s+\d+[A-Za-z-]*\b", flags=re.IGNORECASE)
+STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "does",
+    "for",
+    "from",
+    "how",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "their",
+    "this",
+    "to",
+    "under",
+    "what",
+    "which",
+}
+DOCUMENT_HINT_RULES: dict[str, tuple[tuple[str, float], ...]] = {
+    "AI Act": (
+        ("ai act", 1.0),
+        ("high-risk ai", 0.95),
+        ("high-risk systems", 0.9),
+        ("ai systems", 0.7),
+        ("provider", 0.55),
+        ("deployer", 0.55),
+        ("conformity assessment", 0.85),
+        ("ce marking", 0.8),
+        ("general-purpose ai", 0.8),
+        ("gpaI", 0.8),
+    ),
+    "GDPR": (
+        ("gdpr", 1.0),
+        ("personal data", 0.9),
+        ("data subject", 0.85),
+        ("controller", 0.7),
+        ("processor", 0.7),
+        ("consent", 0.65),
+        ("lawfulness of processing", 0.8),
+    ),
+    "Digital Services Act": (
+        ("digital services act", 1.0),
+        ("dsa", 1.0),
+        ("online platform", 0.9),
+        ("hosting service", 0.8),
+        ("intermediary service", 0.8),
+        ("search engine", 0.75),
+        ("illegal content", 0.8),
+    ),
+}
+
+
+@dataclass(slots=True)
+class QuerySignals:
+    normalized_question: str
+    question_tokens: set[str]
+    content_tokens: set[str]
+    article_refs: set[str]
+    document_hints: dict[str, float]
+    matched_entity_scores: dict[str, float]
 
 
 def cosine_similarity(left: list[float], right: list[float]) -> float:
@@ -28,11 +107,23 @@ class HybridRetriever:
             chunk["chunk_id"]: ChunkRecord.model_validate(chunk)
             for chunk in self.catalog.get("chunks", [])
         }
-        self.document_name_by_id = {
-            doc["document_id"]: doc["name"] for doc in self.catalog.get("documents", [])
+        self.document_name_by_id = {doc["document_id"]: doc["name"] for doc in self.catalog.get("documents", [])}
+        self.document_label_by_id = {
+            document_id: self._canonical_document_name(name)
+            for document_id, name in self.document_name_by_id.items()
         }
         self.entities = self.catalog.get("entities", [])
         self.relations = self.catalog.get("relations", [])
+        self.entity_by_id = {entity["entity_id"]: entity for entity in self.entities}
+        self.chunk_ids_by_entity_id = self._build_chunk_mentions()
+        self.chunk_search_text = {
+            chunk_id: self._chunk_search_text(chunk)
+            for chunk_id, chunk in self.chunk_by_id.items()
+        }
+        self.chunk_tokens = {
+            chunk_id: self._content_tokens(self.chunk_search_text[chunk_id])
+            for chunk_id in self.chunk_by_id
+        }
         self.embeddings = {
             chunk_id: provider.embed_text(chunk.text)
             for chunk_id, chunk in self.chunk_by_id.items()
@@ -40,16 +131,21 @@ class HybridRetriever:
 
     def retrieve(self, question: str, *, top_k: int | None = None, mode: str = "hybrid") -> list[RetrievalHit]:
         top_k = top_k or self.settings.default_retrieval_k
+        signals = self._analyze_question(question)
         query_embedding = self.provider.embed_text(question)
         vector_scores = {
             chunk_id: cosine_similarity(query_embedding, embedding)
             for chunk_id, embedding in self.embeddings.items()
         }
-        lexical_scores = self._lexical_scores(question)
-        graph_scores, graph_paths = self._graph_scores(question)
+        lexical_scores = self._lexical_scores(question, signals)
+        metadata_scores = self._metadata_scores(signals)
+        graph_scores, graph_paths = self._graph_scores(signals)
 
         vector_rank = [chunk_id for chunk_id, _ in sorted(vector_scores.items(), key=lambda item: item[1], reverse=True)]
         lexical_rank = [chunk_id for chunk_id, _ in sorted(lexical_scores.items(), key=lambda item: item[1], reverse=True)]
+        metadata_rank = [
+            chunk_id for chunk_id, _ in sorted(metadata_scores.items(), key=lambda item: item[1], reverse=True)
+        ]
         graph_rank = [chunk_id for chunk_id, _ in sorted(graph_scores.items(), key=lambda item: item[1], reverse=True)]
 
         if mode == "baseline":
@@ -57,7 +153,14 @@ class HybridRetriever:
                 chunk_id: score for chunk_id, score in sorted(vector_scores.items(), key=lambda item: item[1], reverse=True)
             }
         else:
-            fused = reciprocal_rank_fusion([vector_rank, lexical_rank, graph_rank])
+            fused = reciprocal_rank_fusion([metadata_rank, lexical_rank, vector_rank, graph_rank])
+            for chunk_id in self.chunk_by_id:
+                fused[chunk_id] = (
+                    fused.get(chunk_id, 0.0)
+                    + metadata_scores.get(chunk_id, 0.0) * 1.75
+                    + lexical_scores.get(chunk_id, 0.0) * 0.2
+                    + graph_scores.get(chunk_id, 0.0) * 0.15
+                )
 
         hits: list[RetrievalHit] = []
         for chunk_id, score in sorted(fused.items(), key=lambda item: item[1], reverse=True)[:top_k]:
@@ -65,10 +168,14 @@ class HybridRetriever:
             hits.append(
                 RetrievalHit(
                     chunk=chunk,
-                    document_name=self.document_name_by_id.get(chunk.document_id, chunk.document_id),
+                    document_name=self.document_label_by_id.get(
+                        chunk.document_id,
+                        self.document_name_by_id.get(chunk.document_id, chunk.document_id),
+                    ),
                     text_score=lexical_scores.get(chunk_id, 0.0),
                     vector_score=vector_scores.get(chunk_id, 0.0),
                     graph_score=graph_scores.get(chunk_id, 0.0),
+                    metadata_score=metadata_scores.get(chunk_id, 0.0),
                     fused_score=score,
                     graph_paths=graph_paths.get(chunk_id, []),
                 )
@@ -78,44 +185,276 @@ class HybridRetriever:
     def _load_catalog(self) -> dict:
         path = self.settings.processed_data_path / "graph" / "graph_catalog.json"
         if not path.exists():
-            return {"documents": [], "chunks": [], "entities": [], "relations": [], "communities": {}}
+            return {
+                "documents": [],
+                "chunks": [],
+                "entities": [],
+                "relations": [],
+                "communities": {},
+                "mentions": [],
+            }
         return read_json(path)
 
-    def _lexical_scores(self, question: str) -> dict[str, float]:
-        question_tokens = set(tokenize(question))
+    def _build_chunk_mentions(self) -> dict[str, set[str]]:
+        chunk_ids_by_entity_id: dict[str, set[str]] = defaultdict(set)
+        for mention in self.catalog.get("mentions", []):
+            entity_id = mention.get("entity_id")
+            chunk_id = mention.get("chunk_id")
+            if entity_id and chunk_id and chunk_id in self.chunk_by_id:
+                chunk_ids_by_entity_id[entity_id].add(chunk_id)
+        for entity in self.entities:
+            entity_id = entity.get("entity_id")
+            chunk_id = entity.get("source_chunk_id")
+            if entity_id and chunk_id and chunk_id in self.chunk_by_id:
+                chunk_ids_by_entity_id[entity_id].add(chunk_id)
+        return chunk_ids_by_entity_id
+
+    def _lexical_scores(self, question: str, signals: QuerySignals) -> dict[str, float]:
+        question_tokens = signals.content_tokens or signals.question_tokens
         scores: dict[str, float] = {}
         for chunk_id, chunk in self.chunk_by_id.items():
-            chunk_tokens = set(tokenize(chunk.text))
+            chunk_tokens = self.chunk_tokens[chunk_id]
             overlap = len(question_tokens & chunk_tokens)
-            scores[chunk_id] = overlap / max(len(question_tokens), 1)
+            score = overlap / max(len(question_tokens), 1)
+            if chunk.article_ref and self._normalize_article_ref(chunk.article_ref) in signals.article_refs:
+                score += 0.35
+            scores[chunk_id] = score
         return scores
 
-    def _graph_scores(self, question: str) -> tuple[dict[str, float], dict[str, list[GraphPath]]]:
-        matched_entities = [
-            entity
-            for entity in self.entities
-            if any(token in entity.get("canonical_name", "").lower() for token in tokenize(question))
-        ]
+    def _metadata_scores(self, signals: QuerySignals) -> dict[str, float]:
+        scores: dict[str, float] = {}
+        has_article_hint = bool(signals.article_refs)
+        has_document_hint = bool(signals.document_hints)
+        for chunk_id, chunk in self.chunk_by_id.items():
+            score = 0.0
+            normalized_article_ref = self._normalize_article_ref(chunk.article_ref)
+            if normalized_article_ref and normalized_article_ref in signals.article_refs:
+                score += 1.7
+            elif has_article_hint and chunk.article_ref:
+                score -= 0.55
+
+            document_name = self.document_label_by_id.get(chunk.document_id, "")
+            document_hint = signals.document_hints.get(document_name, 0.0)
+            if document_hint:
+                score += 1.45 * document_hint
+            elif has_document_hint:
+                score -= 0.25
+
+            section_title = str(chunk.metadata.get("section_title", ""))
+            section_tokens = self._content_tokens(section_title)
+            if section_tokens:
+                score += 0.45 * (len(section_tokens & signals.content_tokens) / max(len(section_tokens), 1))
+
+            if "high-risk" in signals.normalized_question and "high risk" in self._normalize_text(self.chunk_search_text[chunk_id]):
+                score += 0.3
+            scores[chunk_id] = score
+        return scores
+
+    def _graph_scores(self, signals: QuerySignals) -> tuple[dict[str, float], dict[str, list[GraphPath]]]:
         score_by_chunk: dict[str, float] = defaultdict(float)
         paths: dict[str, list[GraphPath]] = defaultdict(list)
         relations_by_subject: dict[str, list[dict]] = defaultdict(list)
-        entity_by_id = {entity["entity_id"]: entity for entity in self.entities}
         for relation in self.relations:
             relations_by_subject[relation["subject_entity_id"]].append(relation)
 
-        for entity in matched_entities:
-            traversed = [entity["canonical_name"]]
-            for relation in relations_by_subject.get(entity["entity_id"], [])[: self.settings.agent_max_graph_hops + 1]:
-                target = entity_by_id.get(relation["object_entity_id"])
-                if not target:
+        for entity_id, match_score in signals.matched_entity_scores.items():
+            entity = self.entity_by_id.get(entity_id)
+            if not entity:
+                continue
+
+            mention_score = 0.35 + match_score * 0.55
+            for chunk_id in self.chunk_ids_by_entity_id.get(entity_id, {entity.get("source_chunk_id", "")}):
+                if chunk_id not in self.chunk_by_id:
                     continue
-                path = GraphPath(
-                    seed_entity=entity["canonical_name"],
-                    traversed_entities=traversed + [target["canonical_name"]],
-                    relation_chain=[relation["relation_type"]],
-                    score=relation.get("confidence", 0.4),
+                adjusted_score = mention_score * self._document_alignment(chunk_id, signals)
+                score_by_chunk[chunk_id] += adjusted_score
+                paths[chunk_id].append(
+                    GraphPath(
+                        seed_entity=entity["canonical_name"],
+                        traversed_entities=[entity["canonical_name"]],
+                        relation_chain=["mentions"],
+                        score=adjusted_score,
+                    )
                 )
-                score_by_chunk[relation["source_chunk_id"]] += relation.get("confidence", 0.4)
-                paths[relation["source_chunk_id"]].append(path)
+
+            frontier: list[tuple[str, list[str], list[str], int, float]] = [
+                (entity_id, [entity["canonical_name"]], [], 0, match_score)
+            ]
+            visited: set[tuple[str, int]] = {(entity_id, 0)}
+            while frontier:
+                current_id, traversed_entities, relation_chain, depth, carry_score = frontier.pop(0)
+                if depth >= self.settings.agent_max_graph_hops:
+                    continue
+                for relation in relations_by_subject.get(current_id, []):
+                    target = self.entity_by_id.get(relation["object_entity_id"])
+                    source_chunk_id = relation.get("source_chunk_id")
+                    if not target or source_chunk_id not in self.chunk_by_id:
+                        continue
+                    target_name = str(target.get("canonical_name", ""))
+                    target_match = self._entity_overlap_score(target, signals)
+                    hop_score = (
+                        float(relation.get("confidence", 0.4)) * max(carry_score, 0.3)
+                        + target_match * 0.35
+                    ) / (depth + 1)
+                    hop_score *= self._document_alignment(source_chunk_id, signals)
+                    score_by_chunk[source_chunk_id] += hop_score
+                    paths[source_chunk_id].append(
+                        GraphPath(
+                            seed_entity=entity["canonical_name"],
+                            traversed_entities=traversed_entities + [target_name],
+                            relation_chain=relation_chain + [relation["relation_type"]],
+                            score=hop_score,
+                        )
+                    )
+                    state = (relation["object_entity_id"], depth + 1)
+                    if state not in visited:
+                        visited.add(state)
+                        frontier.append(
+                            (
+                                relation["object_entity_id"],
+                                traversed_entities + [target_name],
+                                relation_chain + [relation["relation_type"]],
+                                depth + 1,
+                                max(target_match, carry_score * 0.85),
+                            )
+                        )
         return dict(score_by_chunk), dict(paths)
 
+    def _analyze_question(self, question: str) -> QuerySignals:
+        normalized_question = self._normalize_text(question)
+        question_tokens = set(tokenize(question))
+        content_tokens = self._content_tokens(question)
+        article_refs = {
+            self._normalize_article_ref(match.group(0))
+            for match in ARTICLE_REF_RE.finditer(question)
+            if self._normalize_article_ref(match.group(0))
+        }
+        document_hints = self._infer_document_hints(normalized_question)
+        matched_entity_scores = self._match_entities(normalized_question, content_tokens, article_refs, document_hints)
+        return QuerySignals(
+            normalized_question=normalized_question,
+            question_tokens=question_tokens,
+            content_tokens=content_tokens,
+            article_refs=article_refs,
+            document_hints=document_hints,
+            matched_entity_scores=matched_entity_scores,
+        )
+
+    def _match_entities(
+        self,
+        normalized_question: str,
+        content_tokens: set[str],
+        article_refs: set[str],
+        document_hints: dict[str, float],
+    ) -> dict[str, float]:
+        matched: dict[str, float] = {}
+        for entity in self.entities:
+            score = self._entity_match_score(entity, normalized_question, content_tokens, article_refs, document_hints)
+            if score >= 0.75:
+                matched[entity["entity_id"]] = score
+        return matched
+
+    def _entity_match_score(
+        self,
+        entity: dict,
+        normalized_question: str,
+        content_tokens: set[str],
+        article_refs: set[str],
+        document_hints: dict[str, float],
+    ) -> float:
+        best_score = 0.0
+        canonical_name = str(entity.get("canonical_name", ""))
+        entity_type = str(entity.get("entity_type", ""))
+        if entity_type == "article":
+            normalized_article_ref = self._normalize_article_ref(canonical_name)
+            if normalized_article_ref and normalized_article_ref in article_refs:
+                best_score = max(best_score, 1.8)
+        if entity_type == "regulation":
+            best_score = max(best_score, document_hints.get(canonical_name, 0.0) * 1.3)
+
+        candidate_names = [canonical_name, *entity.get("aliases", [])]
+        for candidate in candidate_names:
+            normalized_candidate = self._normalize_text(str(candidate))
+            if not normalized_candidate:
+                continue
+            if normalized_candidate in normalized_question:
+                token_count = len(normalized_candidate.split())
+                best_score = max(best_score, 0.7 + min(token_count, 4) * 0.15)
+            candidate_tokens = self._content_tokens(str(candidate))
+            if not candidate_tokens:
+                continue
+            overlap = len(candidate_tokens & content_tokens)
+            if overlap:
+                best_score = max(best_score, 0.45 + 0.45 * (overlap / len(candidate_tokens)))
+        return best_score
+
+    def _entity_overlap_score(self, entity: dict, signals: QuerySignals) -> float:
+        return self._entity_match_score(
+            entity,
+            signals.normalized_question,
+            signals.content_tokens,
+            signals.article_refs,
+            signals.document_hints,
+        )
+
+    def _infer_document_hints(self, normalized_question: str) -> dict[str, float]:
+        hints: dict[str, float] = {}
+        for document_name, rules in DOCUMENT_HINT_RULES.items():
+            score = 0.0
+            for phrase, weight in rules:
+                normalized_phrase = self._normalize_text(phrase)
+                if normalized_phrase and normalized_phrase in normalized_question:
+                    score += weight
+            if score > 0:
+                hints[document_name] = min(score, 1.5)
+        return hints
+
+    def _document_alignment(self, chunk_id: str, signals: QuerySignals) -> float:
+        if not signals.document_hints:
+            return 1.0
+        chunk = self.chunk_by_id[chunk_id]
+        document_name = self.document_label_by_id.get(chunk.document_id, "")
+        if document_name in signals.document_hints:
+            return 1.2 + signals.document_hints[document_name] * 0.1
+        return 0.7
+
+    def _chunk_search_text(self, chunk: ChunkRecord) -> str:
+        section_title = str(chunk.metadata.get("section_title", ""))
+        document_name = self.document_label_by_id.get(chunk.document_id, "")
+        return " ".join(
+            part
+            for part in (
+                document_name,
+                chunk.article_ref or "",
+                section_title,
+                chunk.text,
+            )
+            if part
+        )
+
+    @staticmethod
+    def _normalize_text(text: str | None) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+    @classmethod
+    def _normalize_article_ref(cls, value: str | None) -> str:
+        if not value:
+            return ""
+        match = ARTICLE_REF_RE.search(value)
+        if not match:
+            return ""
+        article = re.sub(r"\s+", " ", match.group(0)).strip()
+        return article.title()
+
+    @classmethod
+    def _canonical_document_name(cls, value: str) -> str:
+        normalized = cls._normalize_text(value)
+        return DOCUMENT_NAME_MAP.get(normalized, value.replace("_", " ").strip())
+
+    @classmethod
+    def _content_tokens(cls, text: str) -> set[str]:
+        return {
+            token
+            for token in tokenize(text)
+            if token not in STOPWORDS and (token.isdigit() or len(token) > 2)
+        }

@@ -352,7 +352,7 @@ class LocalTransformersProvider(HeuristicLLMProvider):
             return super().embed_texts(texts)
         try:
             embedder = self._get_embedder()
-            vectors = embedder.encode(texts, normalize_embeddings=True)
+            vectors = embedder.encode(texts, normalize_embeddings=True, show_progress_bar=False)
             return [list(map(float, vector)) for vector in vectors]
         except Exception:
             return super().embed_texts(texts)
@@ -423,6 +423,7 @@ class LocalTransformersProvider(HeuristicLLMProvider):
                     self._materialize_model(self.settings.local_embedding_model, category="sentence_transformers"),
                     device=device,
                     cache_folder=str(self._hf_home / "sentence_transformers"),
+                    local_files_only=True,
                 )
             except Exception as exc:
                 self._embedder_disabled_reason = f"local embedder unavailable: {exc}"
@@ -440,6 +441,7 @@ class LocalTransformersProvider(HeuristicLLMProvider):
                 self._tokenizer = AutoTokenizer.from_pretrained(
                     model_path,
                     cache_dir=str(self._hf_home / "transformers"),
+                    local_files_only=True,
                     trust_remote_code=self.settings.local_trust_remote_code,
                 )
                 if getattr(self._tokenizer, "pad_token_id", None) is None and getattr(
@@ -458,6 +460,7 @@ class LocalTransformersProvider(HeuristicLLMProvider):
                         model_kwargs["dtype"] = getattr(torch, "float32")
                 model = AutoModelForCausalLM.from_pretrained(
                     model_path,
+                    local_files_only=True,
                     **model_kwargs,
                 )
 
@@ -533,6 +536,8 @@ class LocalTransformersProvider(HeuristicLLMProvider):
             "HF_HOME": str(hf_home),
             "TRANSFORMERS_CACHE": str(hf_home / "transformers"),
             "SENTENCE_TRANSFORMERS_HOME": str(hf_home / "sentence_transformers"),
+            "HF_HUB_DISABLE_PROGRESS_BARS": "1",
+            "TOKENIZERS_PARALLELISM": "false",
         }
         for name, value in cache_values.items():
             os.environ[name] = value
@@ -549,6 +554,9 @@ class LocalTransformersProvider(HeuristicLLMProvider):
             return model_ref
 
         target_dir = ensure_dir(self._local_model_root / category / self._slugify_model_ref(model_ref))
+        if any(target_dir.iterdir()):
+            self._materialized_models[model_ref] = target_dir
+            return str(target_dir)
         snapshot_download(
             repo_id=model_ref,
             local_dir=str(target_dir),

@@ -1,0 +1,162 @@
+from __future__ import annotations
+
+import shutil
+import unittest
+from pathlib import Path
+
+from graphrag_engine.common.artifacts import write_json, write_jsonl
+from graphrag_engine.common.models import ChunkRecord, DocumentRecord, EntityRecord, RelationRecord
+from graphrag_engine.common.providers import HeuristicLLMProvider
+from graphrag_engine.common.settings import Settings
+from graphrag_engine.graph.loader import GraphLoader
+from graphrag_engine.retrieval.service import HybridRetriever
+
+
+class RetrievalTests(unittest.TestCase):
+    def test_article_and_domain_hints_prioritize_relevant_regulation(self) -> None:
+        tmp = Path.cwd() / "data" / "cache" / "test_retrieval_case"
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        tmp.mkdir(parents=True, exist_ok=True)
+        try:
+            settings = Settings(data_dir=str(tmp))
+            graph_dir = settings.processed_data_path / "graph"
+            ai_act = DocumentRecord(document_id="doc-ai", name="OJ_L_202401689_EN_TXT", source_path="x", checksum="1")
+            gdpr = DocumentRecord(document_id="doc-gdpr", name="CELEX_32016R0679_EN_TXT", source_path="y", checksum="2")
+            ai_chunk = ChunkRecord(
+                chunk_id="chunk-ai-6",
+                document_id="doc-ai",
+                section_id="sec-ai-6",
+                article_ref="Article 6",
+                text="Article 6 Classification rules for high-risk AI systems. Providers shall ensure conformity assessment for high-risk AI systems before placing them on the market.",
+                text_hash="hash-ai",
+                metadata={"section_title": "Article 6"},
+            )
+            gdpr_chunk = ChunkRecord(
+                chunk_id="chunk-gdpr-6",
+                document_id="doc-gdpr",
+                section_id="sec-gdpr-6",
+                article_ref="Article 6",
+                text="Article 6 Lawfulness of processing. Processing shall be lawful only if one of the legal bases applies to personal data.",
+                text_hash="hash-gdpr",
+                metadata={"section_title": "Article 6"},
+            )
+            write_json(
+                graph_dir / "graph_catalog.json",
+                {
+                    "documents": [ai_act.model_dump(), gdpr.model_dump()],
+                    "chunks": [ai_chunk.model_dump(), gdpr_chunk.model_dump()],
+                    "entities": [
+                        EntityRecord(
+                            entity_id="ent-ai-act",
+                            canonical_name="AI Act",
+                            raw_name="AI Act",
+                            entity_type="regulation",
+                            source_chunk_id="chunk-ai-6",
+                            metadata={"mention_chunk_ids": ["chunk-ai-6"], "document_ids": ["doc-ai"]},
+                        ).model_dump(),
+                        EntityRecord(
+                            entity_id="ent-gdpr",
+                            canonical_name="GDPR",
+                            raw_name="GDPR",
+                            entity_type="regulation",
+                            source_chunk_id="chunk-gdpr-6",
+                            metadata={"mention_chunk_ids": ["chunk-gdpr-6"], "document_ids": ["doc-gdpr"]},
+                        ).model_dump(),
+                        EntityRecord(
+                            entity_id="ent-article-6",
+                            canonical_name="Article 6",
+                            raw_name="Article 6",
+                            entity_type="article",
+                            source_chunk_id="chunk-ai-6",
+                            metadata={"mention_chunk_ids": ["chunk-ai-6", "chunk-gdpr-6"]},
+                        ).model_dump(),
+                        EntityRecord(
+                            entity_id="ent-high-risk",
+                            canonical_name="High-Risk AI System",
+                            raw_name="high-risk AI systems",
+                            entity_type="risk_class",
+                            source_chunk_id="chunk-ai-6",
+                            metadata={"mention_chunk_ids": ["chunk-ai-6"]},
+                        ).model_dump(),
+                    ],
+                    "relations": [
+                        RelationRecord(
+                            relation_id="rel-ai-1",
+                            subject_entity_id="ent-article-6",
+                            object_entity_id="ent-high-risk",
+                            relation_type="defines",
+                            source_chunk_id="chunk-ai-6",
+                            confidence=0.9,
+                        ).model_dump()
+                    ],
+                    "communities": {"ent-ai-act": 0, "ent-gdpr": 1, "ent-article-6": 0, "ent-high-risk": 0},
+                    "mentions": [
+                        {"chunk_id": "chunk-ai-6", "entity_id": "ent-ai-act"},
+                        {"chunk_id": "chunk-ai-6", "entity_id": "ent-article-6"},
+                        {"chunk_id": "chunk-ai-6", "entity_id": "ent-high-risk"},
+                        {"chunk_id": "chunk-gdpr-6", "entity_id": "ent-gdpr"},
+                        {"chunk_id": "chunk-gdpr-6", "entity_id": "ent-article-6"},
+                    ],
+                },
+            )
+            provider = HeuristicLLMProvider(settings)
+            retriever = HybridRetriever(settings, provider)
+            hits = retriever.retrieve("What does Article 6 require for high-risk AI systems?", top_k=2)
+            self.assertEqual(hits[0].chunk.chunk_id, "chunk-ai-6")
+            self.assertEqual(hits[0].document_name, "AI Act")
+            self.assertGreater(hits[0].metadata_score, hits[1].metadata_score)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_graph_loader_preserves_entity_metadata(self) -> None:
+        tmp = Path.cwd() / "data" / "cache" / "test_graph_loader_case"
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        tmp.mkdir(parents=True, exist_ok=True)
+        try:
+            settings = Settings(data_dir=str(tmp))
+            ingestion_dir = settings.processed_data_path / "ingestion"
+            extraction_dir = settings.processed_data_path / "extraction"
+            write_jsonl(
+                ingestion_dir / "documents.jsonl",
+                [DocumentRecord(document_id="doc-ai", name="AI Act", source_path="x", checksum="1").model_dump()],
+            )
+            write_jsonl(
+                ingestion_dir / "chunks.jsonl",
+                [
+                    ChunkRecord(
+                        chunk_id="chunk-ai-6",
+                        document_id="doc-ai",
+                        section_id="sec-ai-6",
+                        article_ref="Article 6",
+                        text="Article 6 text",
+                        text_hash="hash-ai",
+                    ).model_dump()
+                ],
+            )
+            write_jsonl(
+                extraction_dir / "entities.jsonl",
+                [
+                    EntityRecord(
+                        entity_id="ent-article-6",
+                        canonical_name="Article 6",
+                        raw_name="Article 6",
+                        entity_type="article",
+                        source_chunk_id="chunk-ai-6",
+                        metadata={"mention_chunk_ids": ["chunk-ai-6"], "document_ids": ["doc-ai"]},
+                    ).model_dump()
+                ],
+            )
+            write_jsonl(extraction_dir / "relations.jsonl", [])
+            stats = GraphLoader(settings).build_graph()
+            self.assertEqual(stats.entities_loaded, 1)
+            graph_catalog = (settings.processed_data_path / "graph" / "graph_catalog.json").read_text(encoding="utf-8")
+            self.assertIn("mention_chunk_ids", graph_catalog)
+            self.assertIn("document_ids", graph_catalog)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -113,6 +113,7 @@ class RetrievalHit(BaseModel):
     text_score: float = 0.0
     vector_score: float = 0.0
     graph_score: float = 0.0
+    metadata_score: float = 0.0
     fused_score: float = 0.0
     graph_paths: list[GraphPath] = Field(default_factory=list)
 
@@ -172,6 +173,7 @@ class EvaluationSummary(BaseModel):
     aggregate_scores: dict[str, dict[str, float]] = Field(default_factory=dict)
     cases: list[EvaluationResult] = Field(default_factory=list)
     regressions: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class IngestionJobRecord(BaseModel):
@@ -184,4 +186,3 @@ class IngestionJobRecord(BaseModel):
     counts: dict[str, int] = Field(default_factory=dict)
     failures: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
-

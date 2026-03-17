@@ -55,7 +55,9 @@ class GraphLoader:
             "documents": [document.model_dump() for document in documents],
             "chunks": [chunk.model_dump() for chunk in chunks],
             "entities": [
-                entity.model_copy(update={"metadata": {"community_id": communities.get(entity.entity_id)}}).model_dump()
+                entity.model_copy(
+                    update={"metadata": {**entity.metadata, "community_id": communities.get(entity.entity_id)}}
+                ).model_dump()
                 for entity in entities
             ],
             "relations": [relation.model_dump() for relation in relations],
@@ -67,6 +69,7 @@ class GraphLoader:
         notes: list[str] = []
         used_neo4j = False
         if GraphDatabase is not None:
+            driver = None
             try:  # pragma: no cover - requires external service
                 driver = GraphDatabase.driver(
                     self.settings.neo4j_uri,
@@ -76,64 +79,94 @@ class GraphLoader:
                     session.run("CREATE CONSTRAINT document_id IF NOT EXISTS FOR (d:Document) REQUIRE d.document_id IS UNIQUE")
                     session.run("CREATE CONSTRAINT chunk_id IF NOT EXISTS FOR (c:Chunk) REQUIRE c.chunk_id IS UNIQUE")
                     session.run("CREATE CONSTRAINT entity_id IF NOT EXISTS FOR (e:Entity) REQUIRE e.entity_id IS UNIQUE")
-                    for document in documents:
-                        session.run(
-                            "MERGE (d:Document {document_id: $document_id}) SET d += $props",
-                            document_id=document.document_id,
-                            props=_neo4j_props(document.model_dump()),
-                        )
-                    for chunk in chunks:
-                        session.run(
-                            """
-                            MERGE (c:Chunk {chunk_id: $chunk_id})
-                            SET c += $props
-                            WITH c
-                            MATCH (d:Document {document_id: $document_id})
-                            MERGE (d)-[:HAS_CHUNK]->(c)
-                            """,
-                            chunk_id=chunk.chunk_id,
-                            document_id=chunk.document_id,
-                            props=_neo4j_props(chunk.model_dump()),
-                        )
-                    for entity in entities:
-                        entity_payload = entity.model_dump()
-                        entity_payload["community_id"] = communities.get(entity.entity_id)
-                        session.run(
-                            "MERGE (e:Entity {entity_id: $entity_id}) SET e += $props",
-                            entity_id=entity.entity_id,
-                            props=_neo4j_props(entity_payload),
-                        )
-                    for relation in relations:
-                        session.run(
-                            """
-                            MATCH (s:Entity {entity_id: $subject}), (o:Entity {entity_id: $object})
-                            MERGE (s)-[r:RELATES {relation_id: $relation_id}]->(o)
-                            SET r.relation_type = $relation_type,
-                                r.confidence = $confidence,
-                                r.evidence = $evidence,
-                                r.source_chunk_id = $chunk_id
-                            """,
-                            subject=relation.subject_entity_id,
-                            object=relation.object_entity_id,
-                            chunk_id=relation.source_chunk_id,
-                            relation_id=relation.relation_id,
-                            relation_type=relation.relation_type,
-                            confidence=relation.confidence,
-                            evidence=relation.evidence,
-                        )
-                    for mention in mentions:
-                        session.run(
-                            """
-                            MATCH (c:Chunk {chunk_id: $chunk_id}), (e:Entity {entity_id: $entity_id})
-                            MERGE (c)-[:MENTIONS]->(e)
-                            """,
-                            chunk_id=mention["chunk_id"],
-                            entity_id=mention["entity_id"],
-                        )
+                    session.run(
+                        """
+                        UNWIND $rows AS row
+                        MERGE (d:Document {document_id: row.document_id})
+                        SET d += row.props
+                        """,
+                        rows=[
+                            {"document_id": document.document_id, "props": _neo4j_props(document.model_dump())}
+                            for document in documents
+                        ],
+                    )
+                    session.run(
+                        """
+                        UNWIND $rows AS row
+                        MERGE (c:Chunk {chunk_id: row.chunk_id})
+                        SET c += row.props
+                        WITH c, row
+                        MATCH (d:Document {document_id: row.document_id})
+                        MERGE (d)-[:HAS_CHUNK]->(c)
+                        """,
+                        rows=[
+                            {
+                                "chunk_id": chunk.chunk_id,
+                                "document_id": chunk.document_id,
+                                "props": _neo4j_props(chunk.model_dump()),
+                            }
+                            for chunk in chunks
+                        ],
+                    )
+                    session.run(
+                        """
+                        UNWIND $rows AS row
+                        MERGE (e:Entity {entity_id: row.entity_id})
+                        SET e += row.props
+                        """,
+                        rows=[
+                            {
+                                "entity_id": entity.entity_id,
+                                "props": _neo4j_props(
+                                    {
+                                        **entity.model_dump(),
+                                        "community_id": communities.get(entity.entity_id),
+                                    }
+                                ),
+                            }
+                            for entity in entities
+                        ],
+                    )
+                    session.run(
+                        """
+                        UNWIND $rows AS row
+                        MATCH (s:Entity {entity_id: row.subject})
+                        MATCH (o:Entity {entity_id: row.object})
+                        MERGE (s)-[r:RELATES {relation_id: row.relation_id}]->(o)
+                        SET r.relation_type = row.relation_type,
+                            r.confidence = row.confidence,
+                            r.evidence = row.evidence,
+                            r.source_chunk_id = row.chunk_id
+                        """,
+                        rows=[
+                            {
+                                "subject": relation.subject_entity_id,
+                                "object": relation.object_entity_id,
+                                "chunk_id": relation.source_chunk_id,
+                                "relation_id": relation.relation_id,
+                                "relation_type": relation.relation_type,
+                                "confidence": relation.confidence,
+                                "evidence": relation.evidence,
+                            }
+                            for relation in relations
+                        ],
+                    )
+                    session.run(
+                        """
+                        UNWIND $rows AS row
+                        MATCH (c:Chunk {chunk_id: row.chunk_id})
+                        MATCH (e:Entity {entity_id: row.entity_id})
+                        MERGE (c)-[:MENTIONS]->(e)
+                        """,
+                        rows=mentions,
+                    )
                 used_neo4j = True
                 notes.append("Loaded graph into Neo4j.")
             except Exception as exc:
                 notes.append(f"Neo4j load skipped: {exc}")
+            finally:
+                if driver is not None:
+                    driver.close()
         else:
             notes.append("Neo4j driver unavailable; graph persisted as local catalog only.")
 

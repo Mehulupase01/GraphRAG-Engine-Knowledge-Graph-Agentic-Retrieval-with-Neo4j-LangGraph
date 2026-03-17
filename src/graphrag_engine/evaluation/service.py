@@ -43,12 +43,15 @@ class EvaluationService:
         summary = EvaluationSummary(
             run_id=run_id,
             total_cases=len(cases),
-            aggregate_scores={
-                "baseline": {"average_score": round(baseline_avg, 4)},
-                "graphrag": {"average_score": round(graph_avg, 4)},
-            },
+            aggregate_scores=self._aggregate_results(results),
             cases=results,
             regressions=[] if graph_avg >= baseline_avg else ["GraphRAG underperformed baseline."],
+            metadata={
+                "evaluation_provider": self.agent.provider.provider_name,
+                "retrieval_provider": self.agent.retriever.provider.provider_name,
+                "baseline_average": round(baseline_avg, 4),
+                "graphrag_average": round(graph_avg, 4),
+            },
         )
         write_json(self.settings.processed_data_path / "evaluation" / f"{run_id}.json", summary.model_dump())
         return summary
@@ -77,3 +80,16 @@ class EvaluationService:
             response=response,
         )
 
+    @staticmethod
+    def _aggregate_results(results: list[EvaluationResult]) -> dict[str, dict[str, float]]:
+        aggregate_scores: dict[str, dict[str, float]] = {}
+        for approach in sorted({result.approach for result in results}):
+            scoped = [result for result in results if result.approach == approach]
+            aggregate_scores[approach] = {
+                "average_score": round(statistics.fmean(result.score for result in scoped), 4),
+                "faithfulness": round(statistics.fmean(result.faithfulness for result in scoped), 4),
+                "context_precision": round(statistics.fmean(result.context_precision for result in scoped), 4),
+                "answer_relevancy": round(statistics.fmean(result.answer_relevancy for result in scoped), 4),
+                "multi_hop_accuracy": round(statistics.fmean(result.multi_hop_accuracy for result in scoped), 4),
+            }
+        return aggregate_scores

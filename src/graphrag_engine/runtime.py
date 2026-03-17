@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from graphrag_engine.agent.workflow import GraphRAGAgent
 from graphrag_engine.common.logging import configure_logging
-from graphrag_engine.common.providers import build_provider
+from graphrag_engine.common.providers import HeuristicLLMProvider, build_provider
 from graphrag_engine.common.settings import Settings
 from graphrag_engine.evaluation.service import EvaluationService
 from graphrag_engine.extraction.service import ExtractionService
@@ -27,5 +27,10 @@ class GraphRAGRuntime:
         return GraphRAGAgent(self.settings, self.provider, self.build_retriever())
 
     def build_evaluator(self) -> EvaluationService:
-        return EvaluationService(self.settings, self.build_agent())
-
+        evaluation_provider = self.provider
+        if self.settings.model_backend.lower() == "local":
+            evaluation_provider = HeuristicLLMProvider(self.settings)
+        return EvaluationService(
+            self.settings,
+            GraphRAGAgent(self.settings, evaluation_provider, self.build_retriever()),
+        )
