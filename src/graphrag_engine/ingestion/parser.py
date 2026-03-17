@@ -12,10 +12,8 @@ except ImportError:  # pragma: no cover - optional dependency
     PdfReader = None
 
 
-SECTION_HEADING_RE = re.compile(
-    r"^(Article\s+\d+[A-Za-z-]*|Chapter\s+\w+|Section\s+\w+|Title\s+\w+|Annex\s+\w+)",
-    re.IGNORECASE,
-)
+ARTICLE_HEADING_RE = re.compile(r"^Article\s+\d+[A-Za-z-]*[.;:]?$", re.IGNORECASE)
+SECTION_HEADING_RE = re.compile(r"^(Chapter|Section|Title|Annex)\s+[A-Za-z0-9IVXLC-]+[.;:]?$", re.IGNORECASE)
 HEADING_NORMALIZERS: tuple[tuple[str, str], ...] = (
     (r"\bA\s*r\s*t\s*i\s*c\s*l\s*e\b", "Article"),
     (r"\bAr\s*ticle\b", "Article"),
@@ -34,6 +32,14 @@ def _normalize_heading_line(line: str) -> str:
     for pattern, replacement in HEADING_NORMALIZERS:
         normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
     return normalized
+
+
+def _extract_heading(line: str) -> str | None:
+    if ARTICLE_HEADING_RE.fullmatch(line):
+        return re.sub(r"[.;:]+$", "", line).strip()
+    if SECTION_HEADING_RE.fullmatch(line):
+        return re.sub(r"[.;:]+$", "", line).strip()
+    return None
 
 
 def parse_document(path: Path) -> tuple[DocumentRecord, list[str]]:
@@ -93,10 +99,10 @@ def split_into_sections(document: DocumentRecord, pages: list[str]) -> list[Sect
             line = _normalize_heading_line(line)
             if not line:
                 continue
-            heading_match = SECTION_HEADING_RE.match(line)
-            if heading_match:
+            heading = _extract_heading(line)
+            if heading:
                 flush()
-                current_title = heading_match.group(1)
+                current_title = heading
                 current_article = current_title if current_title.lower().startswith("article") else None
                 start_page = page_number
             current_lines.append(line)

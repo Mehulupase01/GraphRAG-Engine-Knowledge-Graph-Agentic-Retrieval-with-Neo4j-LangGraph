@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import tempfile
+import shutil
 import unittest
 from pathlib import Path
 
@@ -13,10 +13,12 @@ from graphrag_engine.extraction.service import ExtractionService
 
 class ExtractionTests(unittest.TestCase):
     def test_entity_resolution_merges_aliases(self) -> None:
-        scratch_root = Path.cwd() / "data" / "cache" / "test_tmp"
-        scratch_root.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=scratch_root) as tmp:
-            settings = Settings(data_dir=tmp)
+        tmp = Path.cwd() / "data" / "cache" / "test_extraction_case"
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        tmp.mkdir(parents=True, exist_ok=True)
+        try:
+            settings = Settings(data_dir=str(tmp))
             ingestion_dir = settings.processed_data_path / "ingestion"
             chunk = ChunkRecord(
                 chunk_id="chunk-1",
@@ -31,6 +33,8 @@ class ExtractionTests(unittest.TestCase):
             result = service.extract()
             self.assertGreaterEqual(result["entities"], 2)
             self.assertGreaterEqual(result["relations"], 1)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

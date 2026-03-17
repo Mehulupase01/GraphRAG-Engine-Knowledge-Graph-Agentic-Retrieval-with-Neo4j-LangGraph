@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import tempfile
+import shutil
 import unittest
 from pathlib import Path
 
@@ -14,10 +14,12 @@ from graphrag_engine.retrieval.service import HybridRetriever
 
 class WorkflowTests(unittest.TestCase):
     def test_agent_returns_citations(self) -> None:
-        scratch_root = Path.cwd() / "data" / "cache" / "test_tmp"
-        scratch_root.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=scratch_root) as tmp:
-            settings = Settings(data_dir=tmp)
+        tmp = Path.cwd() / "data" / "cache" / "test_workflow_case"
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        tmp.mkdir(parents=True, exist_ok=True)
+        try:
+            settings = Settings(data_dir=str(tmp))
             graph_dir = settings.processed_data_path / "graph"
             document = DocumentRecord(document_id="doc-1", name="AI Act", source_path="x", checksum="y")
             chunk = ChunkRecord(
@@ -64,6 +66,8 @@ class WorkflowTests(unittest.TestCase):
             response = agent.run(QueryRequest(question="What does Article 6 require for high-risk systems?"))
             self.assertTrue(response.citations)
             self.assertIn("Article 6", response.answer)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":
