@@ -10,7 +10,6 @@ if (-not (Test-Path $conda)) {
 }
 
 & $conda create -y -n RAGenv python=3.11
-& $conda run -n RAGenv python -m pip install -e ".[dev]"
+& $conda run -n RAGenv python -m pip install -e ".[dev,local]"
 
-Write-Host "Bootstrap complete. Activate RAGenv, add your API key to .env, and place PDFs in data/raw/."
-
+Write-Host "Bootstrap complete. Activate RAGenv, add your API key to .env if needed, and place PDFs in data/raw/."

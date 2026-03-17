@@ -39,14 +39,7 @@ tests/          Unit and integration coverage
 
 ```powershell
 conda activate RAGenv
-python -m pip install -e ".[dev]"
-```
-
-For local-model execution, the existing `qwen2.5` Conda environment is also supported:
-
-```powershell
-conda activate qwen2.5
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,local]"
 ```
 
 4. Build artifacts and run the local stack:
@@ -79,6 +72,8 @@ GRAPH_RAG_LOCAL_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 GRAPH_RAG_LOCAL_DEVICE=cpu
 ```
 
+The first time you use the `local` backend, Hugging Face will download the selected models into your local cache. That can take a while on the first run.
+
 External OpenAI-compatible usage is also supported:
 
 ```env
@@ -93,3 +88,4 @@ GRAPH_RAG_OPENAI_BASE_URL=
 - Neo4j is the primary persistence target. If the driver is unavailable, graph artifacts are still produced locally so ingestion, extraction, and evaluation can continue.
 - Retrieval uses provider embeddings when available and degrades to deterministic embeddings when they are not.
 - On the host machine, `GRAPH_RAG_NEO4J_URI` should stay `bolt://localhost:7687`. Docker overrides that to `bolt://neo4j:7687` automatically for container-to-container communication.
+- `RAGenv` is the recommended interpreter for this project because it now supports both external and local-model execution.
