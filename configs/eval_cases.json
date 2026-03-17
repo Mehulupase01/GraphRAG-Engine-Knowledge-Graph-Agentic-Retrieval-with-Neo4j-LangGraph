@@ -1,0 +1,866 @@
+[
+  {
+    "case_id": "case-001",
+    "question": "Which obligations apply when AI Act classifies a system as high-risk?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-002",
+    "question": "Which obligations apply when AI Act classifies a system as high-risk?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-003",
+    "question": "Which obligations apply when AI Act classifies a system as high-risk?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-004",
+    "question": "How does AI Act define transparency responsibilities for providers or platforms?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-005",
+    "question": "How does AI Act define transparency responsibilities for providers or platforms?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-006",
+    "question": "How does AI Act define transparency responsibilities for providers or platforms?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-007",
+    "question": "Which article in AI Act is relevant when enforcement depends on documented risk assessments?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-008",
+    "question": "Which article in AI Act is relevant when enforcement depends on documented risk assessments?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-009",
+    "question": "Which article in AI Act is relevant when enforcement depends on documented risk assessments?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-010",
+    "question": "How do obligations in AI Act interact with deployer responsibilities and record keeping?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-011",
+    "question": "How do obligations in AI Act interact with deployer responsibilities and record keeping?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-012",
+    "question": "How do obligations in AI Act interact with deployer responsibilities and record keeping?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-013",
+    "question": "What evidence should be cited from AI Act when explaining compliance duties?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-014",
+    "question": "What evidence should be cited from AI Act when explaining compliance duties?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-015",
+    "question": "What evidence should be cited from AI Act when explaining compliance duties?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-016",
+    "question": "Which provision in AI Act establishes the main legal basis for the responsibility being asked about?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-017",
+    "question": "Which provision in AI Act establishes the main legal basis for the responsibility being asked about?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-018",
+    "question": "Which provision in AI Act establishes the main legal basis for the responsibility being asked about?",
+    "expected_keywords": [
+      "high-risk",
+      "provider",
+      "conformity assessment"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "AI Act"
+    }
+  },
+  {
+    "case_id": "case-019",
+    "question": "Which obligations apply when GDPR classifies a system as high-risk?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-020",
+    "question": "Which obligations apply when GDPR classifies a system as high-risk?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-021",
+    "question": "Which obligations apply when GDPR classifies a system as high-risk?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-022",
+    "question": "How does GDPR define transparency responsibilities for providers or platforms?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-023",
+    "question": "How does GDPR define transparency responsibilities for providers or platforms?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-024",
+    "question": "How does GDPR define transparency responsibilities for providers or platforms?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-025",
+    "question": "Which article in GDPR is relevant when enforcement depends on documented risk assessments?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-026",
+    "question": "Which article in GDPR is relevant when enforcement depends on documented risk assessments?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-027",
+    "question": "Which article in GDPR is relevant when enforcement depends on documented risk assessments?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-028",
+    "question": "How do obligations in GDPR interact with deployer responsibilities and record keeping?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-029",
+    "question": "How do obligations in GDPR interact with deployer responsibilities and record keeping?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-030",
+    "question": "How do obligations in GDPR interact with deployer responsibilities and record keeping?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-031",
+    "question": "What evidence should be cited from GDPR when explaining compliance duties?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-032",
+    "question": "What evidence should be cited from GDPR when explaining compliance duties?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-033",
+    "question": "What evidence should be cited from GDPR when explaining compliance duties?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-034",
+    "question": "Which provision in GDPR establishes the main legal basis for the responsibility being asked about?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-035",
+    "question": "Which provision in GDPR establishes the main legal basis for the responsibility being asked about?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-036",
+    "question": "Which provision in GDPR establishes the main legal basis for the responsibility being asked about?",
+    "expected_keywords": [
+      "data subject",
+      "processing",
+      "lawful basis"
+    ],
+    "expected_articles": [
+      "Article 6"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "GDPR"
+    }
+  },
+  {
+    "case_id": "case-037",
+    "question": "Which obligations apply when Digital Services Act classifies a system as high-risk?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-038",
+    "question": "Which obligations apply when Digital Services Act classifies a system as high-risk?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-039",
+    "question": "Which obligations apply when Digital Services Act classifies a system as high-risk?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-040",
+    "question": "How does Digital Services Act define transparency responsibilities for providers or platforms?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-041",
+    "question": "How does Digital Services Act define transparency responsibilities for providers or platforms?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-042",
+    "question": "How does Digital Services Act define transparency responsibilities for providers or platforms?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-043",
+    "question": "Which article in Digital Services Act is relevant when enforcement depends on documented risk assessments?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-044",
+    "question": "Which article in Digital Services Act is relevant when enforcement depends on documented risk assessments?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-045",
+    "question": "Which article in Digital Services Act is relevant when enforcement depends on documented risk assessments?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-046",
+    "question": "How do obligations in Digital Services Act interact with deployer responsibilities and record keeping?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-047",
+    "question": "How do obligations in Digital Services Act interact with deployer responsibilities and record keeping?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-048",
+    "question": "How do obligations in Digital Services Act interact with deployer responsibilities and record keeping?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-049",
+    "question": "What evidence should be cited from Digital Services Act when explaining compliance duties?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-050",
+    "question": "What evidence should be cited from Digital Services Act when explaining compliance duties?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-051",
+    "question": "What evidence should be cited from Digital Services Act when explaining compliance duties?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-052",
+    "question": "Which provision in Digital Services Act establishes the main legal basis for the responsibility being asked about?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "medium",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-053",
+    "question": "Which provision in Digital Services Act establishes the main legal basis for the responsibility being asked about?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "hard",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  },
+  {
+    "case_id": "case-054",
+    "question": "Which provision in Digital Services Act establishes the main legal basis for the responsibility being asked about?",
+    "expected_keywords": [
+      "platform",
+      "risk assessment",
+      "transparency"
+    ],
+    "expected_articles": [
+      "Article 34"
+    ],
+    "difficulty": "multi-hop",
+    "metadata": {
+      "act": "Digital Services Act"
+    }
+  }
+]

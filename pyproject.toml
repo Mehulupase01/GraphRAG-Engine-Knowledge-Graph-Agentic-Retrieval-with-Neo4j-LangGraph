@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "graphrag-engine"
+version = "0.1.0"
+description = "Production-grade GraphRAG for EU regulatory corpora with Neo4j and agentic retrieval."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Mehul Upase" }
+]
+dependencies = [
+  "fastapi>=0.116.0",
+  "pydantic>=2.9.0",
+  "pydantic-settings>=2.5.0",
+  "uvicorn>=0.32.0",
+  "streamlit>=1.41.0",
+  "neo4j>=5.24.0",
+  "langgraph>=0.3.0",
+  "openai>=1.54.0",
+  "pypdf>=5.1.0",
+  "httpx>=0.28.0",
+  "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-cov>=6.0.0",
+]
+local = [
+  "transformers>=4.45.0",
+  "sentence-transformers>=3.0.0",
+  "torch>=2.5.0",
+]
+lint = [
+  "ruff>=0.8.0",
+]
+
+[project.scripts]
+graphrag-engine = "graphrag_engine.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/graphrag_engine"]
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
