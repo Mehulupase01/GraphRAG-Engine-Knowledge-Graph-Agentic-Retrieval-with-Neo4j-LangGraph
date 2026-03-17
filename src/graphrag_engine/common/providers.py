@@ -2,14 +2,22 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from abc import ABC, abstractmethod
 from collections import Counter
+from pathlib import Path
 from typing import Any
 
+from .artifacts import ensure_dir
 from .hashing import stable_hash
 from .models import ChunkRecord
 from .settings import Settings
+
+try:
+    from huggingface_hub import snapshot_download  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    snapshot_download = None
 
 try:
     from openai import OpenAI  # type: ignore
@@ -27,8 +35,9 @@ except ImportError:  # pragma: no cover - optional dependency
     SentenceTransformer = None
 
 try:
-    from transformers import AutoTokenizer, pipeline  # type: ignore
+    from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline  # type: ignore
 except ImportError:  # pragma: no cover - optional dependency
+    AutoModelForCausalLM = None
     AutoTokenizer = None
     pipeline = None
 
@@ -321,6 +330,11 @@ class LocalTransformersProvider(HeuristicLLMProvider):
         self._tokenizer = None
         self._generator = None
         self._embedder = None
+        self._generator_disabled_reason: str | None = None
+        self._embedder_disabled_reason: str | None = None
+        self._hf_home = self._configure_cache_environment()
+        self._local_model_root = ensure_dir(self._hf_home / "local_models")
+        self._materialized_models: dict[str, Path] = {}
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -328,6 +342,9 @@ class LocalTransformersProvider(HeuristicLLMProvider):
             "chat_model": self.settings.local_chat_model,
             "embedding_model": self.settings.local_embedding_model,
             "device": self.settings.local_device,
+            "cache_dir": str(self._hf_home),
+            "generator_available": self._generator_disabled_reason is None,
+            "embedder_available": self._embedder_disabled_reason is None,
         }
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
@@ -397,28 +414,65 @@ class LocalTransformersProvider(HeuristicLLMProvider):
         return super().generate_grounded_answer(question, evidence)
 
     def _get_embedder(self):
+        if self._embedder_disabled_reason is not None:
+            raise RuntimeError(self._embedder_disabled_reason)
         if self._embedder is None and SentenceTransformer is not None:
             device = self._resolve_embedding_device()
-            self._embedder = SentenceTransformer(self.settings.local_embedding_model, device=device)
+            try:
+                self._embedder = SentenceTransformer(
+                    self._materialize_model(self.settings.local_embedding_model, category="sentence_transformers"),
+                    device=device,
+                    cache_folder=str(self._hf_home / "sentence_transformers"),
+                )
+            except Exception as exc:
+                self._embedder_disabled_reason = f"local embedder unavailable: {exc}"
+                raise
         return self._embedder
 
     def _get_generator(self):
+        if self._generator_disabled_reason is not None:
+            raise RuntimeError(self._generator_disabled_reason)
         if self._generator is None:
-            if AutoTokenizer is None or pipeline is None:
+            if AutoTokenizer is None or AutoModelForCausalLM is None or pipeline is None:
                 raise RuntimeError("transformers is not installed")
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                self.settings.local_chat_model,
-                trust_remote_code=self.settings.local_trust_remote_code,
-            )
-            pipe_kwargs: dict[str, Any] = {
-                "task": "text-generation",
-                "model": self.settings.local_chat_model,
-                "tokenizer": self._tokenizer,
-            }
-            device = self._resolve_generation_device()
-            if device != -1:
-                pipe_kwargs["device"] = device
-            self._generator = pipeline(**pipe_kwargs)
+            try:
+                model_path = self._materialize_model(self.settings.local_chat_model, category="transformers")
+                self._tokenizer = AutoTokenizer.from_pretrained(
+                    model_path,
+                    cache_dir=str(self._hf_home / "transformers"),
+                    trust_remote_code=self.settings.local_trust_remote_code,
+                )
+                if getattr(self._tokenizer, "pad_token_id", None) is None and getattr(
+                    self._tokenizer, "eos_token_id", None
+                ) is not None:
+                    self._tokenizer.pad_token_id = self._tokenizer.eos_token_id
+
+                model_kwargs: dict[str, Any] = {
+                    "cache_dir": str(self._hf_home / "transformers"),
+                    "trust_remote_code": self.settings.local_trust_remote_code,
+                }
+                if torch is not None:
+                    if self._resolve_generation_device() != -1:
+                        model_kwargs["torch_dtype"] = getattr(torch, "float16", None) or getattr(torch, "float32")
+                    else:
+                        model_kwargs["torch_dtype"] = getattr(torch, "float32")
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    **model_kwargs,
+                )
+
+                pipe_kwargs: dict[str, Any] = {
+                    "task": "text-generation",
+                    "model": model,
+                    "tokenizer": self._tokenizer,
+                }
+                device = self._resolve_generation_device()
+                if device != -1:
+                    pipe_kwargs["device"] = device
+                self._generator = pipeline(**pipe_kwargs)
+            except Exception as exc:
+                self._generator_disabled_reason = f"local generator unavailable: {exc}"
+                raise
         return self._generator
 
     def _generate_text(self, *, system_prompt: str, user_prompt: str) -> str:
@@ -471,6 +525,38 @@ class LocalTransformersProvider(HeuristicLLMProvider):
             return "cuda"
         return "cpu"
 
+    def _configure_cache_environment(self) -> Path:
+        hf_home = ensure_dir(self.settings.cache_data_path / "huggingface")
+        ensure_dir(hf_home / "transformers")
+        ensure_dir(hf_home / "sentence_transformers")
+        cache_values = {
+            "HF_HOME": str(hf_home),
+            "TRANSFORMERS_CACHE": str(hf_home / "transformers"),
+            "SENTENCE_TRANSFORMERS_HOME": str(hf_home / "sentence_transformers"),
+        }
+        for name, value in cache_values.items():
+            os.environ[name] = value
+        return hf_home
+
+    def _materialize_model(self, model_ref: str, *, category: str) -> str:
+        model_path = Path(model_ref)
+        if model_path.exists():
+            return str(model_path)
+        cached = self._materialized_models.get(model_ref)
+        if cached is not None:
+            return str(cached)
+        if snapshot_download is None:
+            return model_ref
+
+        target_dir = ensure_dir(self._local_model_root / category / self._slugify_model_ref(model_ref))
+        snapshot_download(repo_id=model_ref, local_dir=str(target_dir))
+        self._materialized_models[model_ref] = target_dir
+        return str(target_dir)
+
+    @staticmethod
+    def _slugify_model_ref(model_ref: str) -> str:
+        return re.sub(r"[^A-Za-z0-9._-]+", "--", model_ref).strip("-") or "model"
+
 
 def build_provider(settings: Settings) -> LLMProvider:
     backend = settings.model_backend.lower().strip()
@@ -489,4 +575,3 @@ def build_provider(settings: Settings) -> LLMProvider:
     if _local_stack_available():
         return LocalTransformersProvider(settings)
     return HeuristicLLMProvider(settings)
-
