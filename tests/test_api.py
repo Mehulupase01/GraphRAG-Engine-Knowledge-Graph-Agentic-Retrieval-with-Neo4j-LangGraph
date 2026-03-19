@@ -55,11 +55,46 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(ready.status_code, 200)
             self.assertIn("provider", ready.json())
             self.assertEqual(ready.json()["artifacts"]["chunks"], 1)
+            self.assertIn("API key protection is disabled for /v1 endpoints.", ready.json()["warnings"])
 
             status = client.get("/v1/system/status")
             self.assertEqual(status.status_code, 200)
             self.assertEqual(status.json()["artifact_counts"]["documents"], 1)
             self.assertIn("sample.pdf", status.json()["raw_files"])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_protected_endpoints_require_api_key_when_configured(self) -> None:
+        tmp = Path.cwd() / "data" / "cache" / "test_api_auth_case"
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        tmp.mkdir(parents=True, exist_ok=True)
+        try:
+            settings = Settings(
+                data_dir=str(tmp),
+                model_backend="heuristic",
+                api_key="secret-token",
+                neo4j_uri="bolt://127.0.0.1:9999",
+            )
+            graph_dir = settings.processed_data_path / "graph"
+            graph_dir.mkdir(parents=True, exist_ok=True)
+            (graph_dir / "graph_catalog.json").write_text(
+                json.dumps({"documents": [], "chunks": [], "entities": [], "relations": []}),
+                encoding="utf-8",
+            )
+
+            app = create_app(GraphRAGRuntime(settings))
+            client = TestClient(app)
+
+            unauthorized = client.get("/v1/system/status")
+            self.assertEqual(unauthorized.status_code, 401)
+
+            authorized = client.get("/v1/system/status", headers={"X-API-Key": "secret-token"})
+            self.assertEqual(authorized.status_code, 200)
+
+            ready = client.get("/health/ready")
+            self.assertEqual(ready.status_code, 200)
+            self.assertNotIn("API key protection is disabled for /v1 endpoints.", ready.json()["warnings"])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

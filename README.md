@@ -35,14 +35,15 @@ tests/          Unit and integration coverage
 
 1. Copy `.env.example` to `.env`.
 2. Put the EU AI Act, GDPR, and DSA PDFs in `data/raw/`.
-3. Create and use the Conda environment:
+3. Optional but recommended: set `GRAPH_RAG_API_KEY` in `.env` if you want the `/v1/*` API endpoints protected even on localhost.
+4. Create and use the Conda environment:
 
 ```powershell
 conda activate RAGenv
 python -m pip install -e ".[dev,local]"
 ```
 
-4. Build artifacts and run the local stack:
+5. Build artifacts and run the local stack:
 
 ```powershell
 graphrag-engine doctor
@@ -103,6 +104,8 @@ GRAPH_RAG_GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 
 `auto` now prefers backends in this order when credentials are available: `openai -> anthropic -> gemini -> local -> heuristic`.
 
+If you do not have Anthropic or Gemini keys, that is completely fine. The local Qwen-based backend remains the primary offline development path and is enough to run the full project locally.
+
 ## API and deployment health
 
 The API now exposes:
@@ -111,6 +114,8 @@ The API now exposes:
 - `GET /health/ready`: readiness probe with provider, artifact counts, and Neo4j status
 - `GET /v1/system/status`: runtime summary for dashboards or deployment checks
 
+When `GRAPH_RAG_API_KEY` is set, `/v1/*` endpoints require an `X-API-Key` header. Health endpoints remain public so you can still use them for container or localhost checks.
+
 Docker Compose includes service health checks for Neo4j, the API, and the Streamlit dashboard. Once the graph artifacts exist, you can verify the stack with:
 
 ```powershell
@@ -118,6 +123,14 @@ docker compose up --build
 curl http://localhost:8000/health/ready
 curl http://localhost:8000/v1/system/status
 ```
+
+The Streamlit dashboard now includes:
+
+- `Home`: product overview, benchmark posture, and guided navigation
+- `Chat`: grounded QA with compare mode for hybrid vs baseline retrieval
+- `Corpus Explorer`: chunk-level browsing by regulation and article
+- `Ops`: graph, evaluation, and artifact inspection
+- `Project Guide`: detailed in-app documentation and runbooks
 
 ## Benchmark status
 

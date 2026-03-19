@@ -11,6 +11,7 @@ class Settings(BaseModel):
     env: str = "development"
     data_dir: str = "./data"
     log_level: str = "INFO"
+    api_key: str = ""
     model_backend: str = "local"
     openai_api_key: str = ""
     openai_base_url: str = ""
@@ -85,6 +86,7 @@ class Settings(BaseModel):
             env=get("GRAPH_RAG_ENV", "development"),
             data_dir=get("GRAPH_RAG_DATA_DIR", "./data"),
             log_level=get("GRAPH_RAG_LOG_LEVEL", "INFO"),
+            api_key=get("GRAPH_RAG_API_KEY", ""),
             model_backend=get("GRAPH_RAG_MODEL_BACKEND", "local"),
             openai_api_key=get("GRAPH_RAG_OPENAI_API_KEY", ""),
             openai_base_url=get("GRAPH_RAG_OPENAI_BASE_URL", ""),
