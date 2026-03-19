@@ -91,7 +91,7 @@ def render_response_details(response: QueryResponse, *, panel_key: str) -> None:
             st.json(response.trace)
         with graph_col:
             st.markdown("**Graph paths**")
-            st.json([path.model_dump() for path in response.graph_paths[:20]], expanded=False)
+            st.json([path.model_dump() for path in response.graph_paths[:20]])
 
     if response.retrieved_chunks:
         with st.expander(f"Retrieved chunks ({len(response.retrieved_chunks)})", expanded=False):
