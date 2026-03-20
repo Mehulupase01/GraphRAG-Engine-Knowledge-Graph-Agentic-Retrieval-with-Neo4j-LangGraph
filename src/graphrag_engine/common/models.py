@@ -105,6 +105,32 @@ class GraphPath(BaseModel):
     score: float = 0.0
 
 
+class PathRecord(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    path_id: str
+    seed_entity_id: str = ""
+    seed_entity: str
+    traversed_entity_ids: list[str] = Field(default_factory=list)
+    traversed_entities: list[str] = Field(default_factory=list)
+    relation_chain: list[str] = Field(default_factory=list)
+    supporting_chunk_ids: list[str] = Field(default_factory=list)
+    terminal_chunk_id: str = ""
+    score: float = 0.0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CacheEntry(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    cache_key: str
+    retrieval_mode: str
+    question_signature: str
+    top_chunk_ids: list[str] = Field(default_factory=list)
+    paths: list[PathRecord] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class RetrievalHit(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

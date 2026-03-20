@@ -6,11 +6,13 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from graphrag_engine.common.artifacts import read_json
-from graphrag_engine.common.models import ChunkRecord, GraphPath, RetrievalHit
+from graphrag_engine.common.hashing import stable_hash
+from graphrag_engine.common.models import CacheEntry, ChunkRecord, GraphPath, PathRecord, RetrievalHit
 from graphrag_engine.common.providers import LLMProvider, tokenize
 from graphrag_engine.common.settings import Settings
 
 from .fusion import reciprocal_rank_fusion
+from .path_cache import PathCacheStore
 
 DOCUMENT_NAME_MAP = {
     "celex 32016r0679 en txt": "GDPR",
@@ -102,6 +104,7 @@ class HybridRetriever:
     def __init__(self, settings: Settings, provider: LLMProvider) -> None:
         self.settings = settings
         self.provider = provider
+        self.last_retrieval_meta: dict[str, object] = {}
         self.catalog = self._load_catalog()
         self.chunk_by_id = {
             chunk["chunk_id"]: ChunkRecord.model_validate(chunk)
@@ -115,6 +118,11 @@ class HybridRetriever:
         self.entities = self.catalog.get("entities", [])
         self.relations = self.catalog.get("relations", [])
         self.entity_by_id = {entity["entity_id"]: entity for entity in self.entities}
+        self.relations_by_subject: dict[str, list[dict]] = defaultdict(list)
+        self.relations_by_object: dict[str, list[dict]] = defaultdict(list)
+        for relation in self.relations:
+            self.relations_by_subject[relation["subject_entity_id"]].append(relation)
+            self.relations_by_object[relation["object_entity_id"]].append(relation)
         self.chunk_ids_by_entity_id = self._build_chunk_mentions()
         self.chunk_search_text = {
             chunk_id: self._chunk_search_text(chunk)
@@ -128,10 +136,14 @@ class HybridRetriever:
             chunk_id: provider.embed_text(chunk.text)
             for chunk_id, chunk in self.chunk_by_id.items()
         }
+        self.path_cache = PathCacheStore(settings)
 
     def retrieve(self, question: str, *, top_k: int | None = None, mode: str = "hybrid") -> list[RetrievalHit]:
         top_k = top_k or self.settings.default_retrieval_k
         signals = self._analyze_question(question)
+        if mode in {"path_hybrid", "path_cache"}:
+            return self._retrieve_path_mode(question, signals, top_k=top_k, mode=mode)
+
         query_embedding = self.provider.embed_text(question)
         vector_scores = {
             chunk_id: cosine_similarity(query_embedding, embedding)
@@ -162,24 +174,23 @@ class HybridRetriever:
                     + graph_scores.get(chunk_id, 0.0) * 0.15
                 )
 
-        hits: list[RetrievalHit] = []
-        for chunk_id, score in sorted(fused.items(), key=lambda item: item[1], reverse=True)[:top_k]:
-            chunk = self.chunk_by_id[chunk_id]
-            hits.append(
-                RetrievalHit(
-                    chunk=chunk,
-                    document_name=self.document_label_by_id.get(
-                        chunk.document_id,
-                        self.document_name_by_id.get(chunk.document_id, chunk.document_id),
-                    ),
-                    text_score=lexical_scores.get(chunk_id, 0.0),
-                    vector_score=vector_scores.get(chunk_id, 0.0),
-                    graph_score=graph_scores.get(chunk_id, 0.0),
-                    metadata_score=metadata_scores.get(chunk_id, 0.0),
-                    fused_score=score,
-                    graph_paths=graph_paths.get(chunk_id, []),
-                )
-            )
+        hits = self._build_hits(
+            fused,
+            lexical_scores=lexical_scores,
+            vector_scores=vector_scores,
+            graph_scores=graph_scores,
+            metadata_scores=metadata_scores,
+            graph_paths=graph_paths,
+            top_k=top_k,
+        )
+        self.last_retrieval_meta = {
+            "mode": mode,
+            "matched_entities": len(signals.matched_entity_scores),
+            "article_refs": sorted(signals.article_refs),
+            "document_hints": signals.document_hints,
+            "cache_hit": False,
+            "path_count": 0,
+        }
         return hits
 
     def _load_catalog(self) -> dict:
