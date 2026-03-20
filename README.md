@@ -816,6 +816,7 @@ For deeper project notes beyond this README, see:
 - [`docs/user_guide.md`](docs/user_guide.md)
 - [`docs/operations_runbook.md`](docs/operations_runbook.md)
 - [`docs/release_checklist.md`](docs/release_checklist.md)
+- [`docs/reproduce_results.md`](docs/reproduce_results.md)
 
 ## References
 
@@ -839,6 +840,7 @@ For deeper project notes beyond this README, see:
 - Graph load stats: [`data/processed/graph/load_stats.json`](data/processed/graph/load_stats.json)
 - Latest benchmark output: [`data/processed/evaluation/eval_2fca346db6561871.json`](data/processed/evaluation/eval_2fca346db6561871.json)
 - Release checklist: [`docs/release_checklist.md`](docs/release_checklist.md)
+- Reproducibility guide: [`docs/reproduce_results.md`](docs/reproduce_results.md)
 
 ---
 
