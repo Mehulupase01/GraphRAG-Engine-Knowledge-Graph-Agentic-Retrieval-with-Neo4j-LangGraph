@@ -204,10 +204,12 @@ class RetrievalTests(unittest.TestCase):
             self.assertTrue(path_hits[0].graph_paths)
             self.assertEqual(retriever.last_retrieval_meta["mode"], "path_hybrid")
             self.assertGreater(int(retriever.last_retrieval_meta["path_count"]), 0)
+            self.assertIn("total_latency_ms", retriever.last_retrieval_meta)
 
             cached_hits = retriever.retrieve("What does Article 6 require for high-risk AI systems?", top_k=2, mode="path_cache")
             self.assertEqual(cached_hits[0].chunk.chunk_id, "chunk-ai-6")
             self.assertFalse(bool(retriever.last_retrieval_meta["cache_hit"]))
+            self.assertEqual(int(retriever.last_retrieval_meta["cache_schema_version"]), 2)
 
             cached_hits_again = retriever.retrieve("What does Article 6 require for high-risk AI systems?", top_k=2, mode="path_cache")
             self.assertEqual(cached_hits_again[0].chunk.chunk_id, "chunk-ai-6")

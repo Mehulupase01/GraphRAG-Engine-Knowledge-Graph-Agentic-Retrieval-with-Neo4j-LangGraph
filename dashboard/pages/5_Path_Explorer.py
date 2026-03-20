@@ -124,12 +124,13 @@ else:
     path_frame = _path_frame(response)
     chunk_frame = _chunk_frame(response)
 
-    metrics = st.columns(5)
+    metrics = st.columns(6)
     metrics[0].metric("Ranked paths", int(retrieval_meta.get("path_count", len(path_frame))))
     metrics[1].metric("Cache hit", "Yes" if retrieval_meta.get("cache_hit") else "No")
     metrics[2].metric("Cached entries", int(retrieval_meta.get("cached_entries", 0)))
     metrics[3].metric("Graph paths", len(response.graph_paths))
     metrics[4].metric("Citations", len(response.citations))
+    metrics[5].metric("Retrieval latency", f"{float(retrieval_meta.get('total_latency_ms', 0.0)):.1f} ms")
 
     section_title("Answer alignment")
     answer_left, answer_right = st.columns((1.1, 0.9), gap="large")
@@ -151,6 +152,14 @@ else:
         render_card(
             "Document hints",
             ", ".join(sorted(retrieval_meta.get("document_hints", {}).keys())) or "None",
+        )
+        render_card(
+            "Cache lookup latency",
+            f"{float(retrieval_meta.get('cache_lookup_ms', 0.0)):.1f} ms",
+        )
+        render_card(
+            "Path enumeration latency",
+            f"{float(retrieval_meta.get('path_enumeration_ms', 0.0)):.1f} ms",
         )
 
     tab_paths, tab_chunks, tab_trace = st.tabs(["Ranked Paths", "Supporting Chunks", "Trace"])

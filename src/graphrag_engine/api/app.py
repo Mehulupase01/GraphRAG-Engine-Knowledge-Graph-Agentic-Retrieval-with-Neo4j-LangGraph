@@ -7,6 +7,7 @@ from typing import Any
 from graphrag_engine.common.artifacts import read_json
 from graphrag_engine.common.compat import BaseModel, Field
 from graphrag_engine.common.models import IngestionJobRecord, QueryRequest
+from graphrag_engine.retrieval.path_cache import PathCacheStore
 from graphrag_engine.runtime import GraphRAGRuntime
 
 try:
@@ -41,10 +42,7 @@ def _artifact_counts(runtime: GraphRAGRuntime) -> dict[str, int]:
 
 
 def _path_cache_counts(runtime: GraphRAGRuntime) -> dict[str, int]:
-    path_cache_root = runtime.settings.processed_data_path / "path_cache"
-    return {
-        "entries": len(list(path_cache_root.glob("*.json"))),
-    }
+    return PathCacheStore(runtime.settings).stats()
 
 
 def _neo4j_status(runtime: GraphRAGRuntime) -> dict[str, Any]:

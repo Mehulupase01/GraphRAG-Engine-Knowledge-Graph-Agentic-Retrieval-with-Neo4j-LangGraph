@@ -55,11 +55,13 @@ class ApiTests(unittest.TestCase):
             self.assertEqual(ready.status_code, 200)
             self.assertIn("provider", ready.json())
             self.assertEqual(ready.json()["artifacts"]["chunks"], 1)
+            self.assertIn("schema_version", ready.json()["path_cache"])
             self.assertIn("API key protection is disabled for /v1 endpoints.", ready.json()["warnings"])
 
             status = client.get("/v1/system/status")
             self.assertEqual(status.status_code, 200)
             self.assertEqual(status.json()["artifact_counts"]["documents"], 1)
+            self.assertIn("schema_version", status.json()["path_cache"])
             self.assertIn("sample.pdf", status.json()["raw_files"])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
