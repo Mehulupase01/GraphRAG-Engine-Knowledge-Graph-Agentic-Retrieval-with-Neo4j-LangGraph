@@ -117,7 +117,12 @@ with st.sidebar:
         f"Configured model: `{settings['local_chat_model'] if settings['model_backend'] == 'local' else settings['chat_model']}`"
     )
     compare_mode = st.checkbox("Compare hybrid vs baseline", value=True)
-    retrieval_mode = st.selectbox("Primary retrieval mode", ["hybrid", "baseline"], index=0, disabled=compare_mode)
+    retrieval_mode = st.selectbox(
+        "Primary retrieval mode",
+        ["hybrid", "baseline", "path_hybrid", "path_cache"],
+        index=0,
+        disabled=compare_mode,
+    )
     top_k = st.slider("Top-k evidence", min_value=3, max_value=12, value=int(settings["default_retrieval_k"]))
     st.subheader("Starter prompts")
     starter = st.selectbox("Choose a question", ["Custom question", *SAMPLE_QUESTIONS])
@@ -132,6 +137,7 @@ render_badges(
     [
         "Hybrid compare mode" if compare_mode else f"Single mode: {retrieval_mode}",
         f"Top-k: {top_k}",
+        "PathCacheRAG modes available",
         "Grounded legal QA",
     ]
 )

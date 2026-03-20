@@ -264,9 +264,6 @@ class HybridRetriever:
     def _graph_scores(self, signals: QuerySignals) -> tuple[dict[str, float], dict[str, list[GraphPath]]]:
         score_by_chunk: dict[str, float] = defaultdict(float)
         paths: dict[str, list[GraphPath]] = defaultdict(list)
-        relations_by_subject: dict[str, list[dict]] = defaultdict(list)
-        for relation in self.relations:
-            relations_by_subject[relation["subject_entity_id"]].append(relation)
 
         for entity_id, match_score in signals.matched_entity_scores.items():
             entity = self.entity_by_id.get(entity_id)
@@ -296,7 +293,7 @@ class HybridRetriever:
                 current_id, traversed_entities, relation_chain, depth, carry_score = frontier.pop(0)
                 if depth >= self.settings.agent_max_graph_hops:
                     continue
-                for relation in relations_by_subject.get(current_id, []):
+                for relation in self.relations_by_subject.get(current_id, []):
                     target = self.entity_by_id.get(relation["object_entity_id"])
                     source_chunk_id = relation.get("source_chunk_id")
                     if not target or source_chunk_id not in self.chunk_by_id:
@@ -330,6 +327,254 @@ class HybridRetriever:
                             )
                         )
         return dict(score_by_chunk), dict(paths)
+
+    def _retrieve_path_mode(self, question: str, signals: QuerySignals, *, top_k: int, mode: str) -> list[RetrievalHit]:
+        query_embedding = self.provider.embed_text(question)
+        vector_scores = {
+            chunk_id: cosine_similarity(query_embedding, embedding)
+            for chunk_id, embedding in self.embeddings.items()
+        }
+        lexical_scores = self._lexical_scores(question, signals)
+        metadata_scores = self._metadata_scores(signals)
+
+        cache_key = self.path_cache.build_cache_key(
+            question=question,
+            retrieval_mode=mode,
+            article_refs=sorted(signals.article_refs),
+            document_hints=signals.document_hints,
+            matched_entity_ids=sorted(signals.matched_entity_scores),
+            hop_limit=self.settings.agent_max_graph_hops,
+        )
+        cache_entry = self.path_cache.load(cache_key) if mode == "path_cache" else None
+        cache_hit = cache_entry is not None
+        if cache_entry is None:
+            path_records = self._enumerate_path_records(signals)
+            cache_entry = CacheEntry(
+                cache_key=cache_key,
+                retrieval_mode=mode,
+                question_signature=stable_hash(question.strip().lower(), prefix="q"),
+                top_chunk_ids=[],
+                paths=path_records,
+                metadata={
+                    "cache_schema_version": self.path_cache.CACHE_SCHEMA_VERSION,
+                    "matched_entities": len(signals.matched_entity_scores),
+                    "article_refs": sorted(signals.article_refs),
+                    "document_hints": signals.document_hints,
+                },
+            )
+            if mode == "path_cache":
+                self.path_cache.save(cache_entry)
+
+        path_scores, graph_paths = self._aggregate_path_scores(cache_entry.paths, signals)
+        path_rank = [chunk_id for chunk_id, _ in sorted(path_scores.items(), key=lambda item: item[1], reverse=True)]
+        vector_rank = [chunk_id for chunk_id, _ in sorted(vector_scores.items(), key=lambda item: item[1], reverse=True)]
+        lexical_rank = [chunk_id for chunk_id, _ in sorted(lexical_scores.items(), key=lambda item: item[1], reverse=True)]
+        metadata_rank = [
+            chunk_id for chunk_id, _ in sorted(metadata_scores.items(), key=lambda item: item[1], reverse=True)
+        ]
+
+        fused = reciprocal_rank_fusion([metadata_rank, lexical_rank, vector_rank, path_rank])
+        for chunk_id in self.chunk_by_id:
+            fused[chunk_id] = (
+                fused.get(chunk_id, 0.0)
+                + metadata_scores.get(chunk_id, 0.0) * 1.55
+                + lexical_scores.get(chunk_id, 0.0) * 0.18
+                + path_scores.get(chunk_id, 0.0) * 0.35
+            )
+
+        hits = self._build_hits(
+            fused,
+            lexical_scores=lexical_scores,
+            vector_scores=vector_scores,
+            graph_scores=path_scores,
+            metadata_scores=metadata_scores,
+            graph_paths=graph_paths,
+            top_k=top_k,
+        )
+        if mode == "path_cache" and hits:
+            cache_entry.top_chunk_ids = [hit.chunk.chunk_id for hit in hits]
+            self.path_cache.save(cache_entry)
+        self.last_retrieval_meta = {
+            "mode": mode,
+            "matched_entities": len(signals.matched_entity_scores),
+            "article_refs": sorted(signals.article_refs),
+            "document_hints": signals.document_hints,
+            "cache_hit": cache_hit,
+            "cache_key": cache_key,
+            "path_count": len(cache_entry.paths),
+            "cached_entries": self.path_cache.stats()["entries"],
+            "top_paths": [record.model_dump() for record in cache_entry.paths[:12]],
+        }
+        return hits
+
+    def _enumerate_path_records(self, signals: QuerySignals) -> list[PathRecord]:
+        path_records: list[PathRecord] = []
+        path_ids_seen: set[str] = set()
+        ranked_seeds = sorted(signals.matched_entity_scores.items(), key=lambda item: item[1], reverse=True)[:8]
+        for seed_entity_id, seed_score in ranked_seeds:
+            seed_entity = self.entity_by_id.get(seed_entity_id)
+            if not seed_entity:
+                continue
+            seed_name = str(seed_entity.get("canonical_name", seed_entity_id))
+
+            seed_chunk_ids = self._supporting_chunks_for_path(
+                signals,
+                source_chunk_id=seed_entity.get("source_chunk_id", ""),
+                entity_id=seed_entity_id,
+            )
+            for chunk_id in seed_chunk_ids:
+                if chunk_id not in self.chunk_by_id:
+                    continue
+                record = PathRecord(
+                    path_id=stable_hash(f"{seed_entity_id}:{chunk_id}:seed", prefix="path"),
+                    seed_entity_id=seed_entity_id,
+                    seed_entity=seed_name,
+                    traversed_entity_ids=[seed_entity_id],
+                    traversed_entities=[seed_name],
+                    relation_chain=["seed_mention"],
+                    supporting_chunk_ids=[chunk_id],
+                    terminal_chunk_id=chunk_id,
+                    score=0.55 + seed_score * 0.4,
+                    metadata={"depth": 0},
+                )
+                if record.path_id not in path_ids_seen:
+                    path_ids_seen.add(record.path_id)
+                    path_records.append(record)
+
+            frontier: list[tuple[str, list[str], list[str], list[str], int, float]] = [
+                (seed_entity_id, [seed_entity_id], [seed_name], [], 0, seed_score)
+            ]
+            visited: set[tuple[str, int]] = {(seed_entity_id, 0)}
+            while frontier:
+                current_id, traversed_ids, traversed_names, relation_chain, depth, carry_score = frontier.pop(0)
+                if depth >= self.settings.agent_max_graph_hops:
+                    continue
+
+                outgoing = [
+                    (relation, relation["object_entity_id"], relation["relation_type"])
+                    for relation in self.relations_by_subject.get(current_id, [])
+                ]
+                incoming = [
+                    (relation, relation["subject_entity_id"], f"inv:{relation['relation_type']}")
+                    for relation in self.relations_by_object.get(current_id, [])
+                ]
+                for relation, next_entity_id, relation_label in [*outgoing, *incoming]:
+                    next_entity = self.entity_by_id.get(next_entity_id)
+                    if not next_entity:
+                        continue
+                    source_chunk_id = relation.get("source_chunk_id", "")
+                    supporting_chunk_ids = self._supporting_chunks_for_path(
+                        signals,
+                        source_chunk_id=source_chunk_id,
+                        entity_id=next_entity_id,
+                    )
+                    if not supporting_chunk_ids:
+                        continue
+                    next_name = str(next_entity.get("canonical_name", next_entity_id))
+                    next_match = self._entity_overlap_score(next_entity, signals)
+                    path_score = (
+                        max(carry_score, 0.35) * 0.45
+                        + float(relation.get("confidence", 0.4)) * 0.35
+                        + next_match * 0.35
+                    ) / (depth + 1)
+                    path_id = stable_hash(
+                        f"{seed_entity_id}:{'|'.join(traversed_ids + [next_entity_id])}:{relation_label}:{source_chunk_id}",
+                        prefix="path",
+                    )
+                    record = PathRecord(
+                        path_id=path_id,
+                        seed_entity_id=seed_entity_id,
+                        seed_entity=seed_name,
+                        traversed_entity_ids=traversed_ids + [next_entity_id],
+                        traversed_entities=traversed_names + [next_name],
+                        relation_chain=relation_chain + [relation_label],
+                        supporting_chunk_ids=supporting_chunk_ids,
+                        terminal_chunk_id=source_chunk_id,
+                        score=path_score,
+                        metadata={"depth": depth + 1},
+                    )
+                    if record.path_id not in path_ids_seen:
+                        path_ids_seen.add(record.path_id)
+                        path_records.append(record)
+                    state = (next_entity_id, depth + 1)
+                    if state not in visited:
+                        visited.add(state)
+                        frontier.append(
+                            (
+                                next_entity_id,
+                                traversed_ids + [next_entity_id],
+                                traversed_names + [next_name],
+                                relation_chain + [relation_label],
+                                depth + 1,
+                                max(next_match, carry_score * 0.85),
+                            )
+                        )
+        return sorted(path_records, key=lambda item: item.score, reverse=True)[:64]
+
+    def _aggregate_path_scores(
+        self,
+        path_records: list[PathRecord],
+        signals: QuerySignals,
+    ) -> tuple[dict[str, float], dict[str, list[GraphPath]]]:
+        raw_scores_by_chunk: dict[str, list[float]] = defaultdict(list)
+        graph_paths: dict[str, list[GraphPath]] = defaultdict(list)
+        for record in path_records:
+            for index, chunk_id in enumerate(record.supporting_chunk_ids or [record.terminal_chunk_id]):
+                if chunk_id not in self.chunk_by_id:
+                    continue
+                supporting_weight = 1.0 if index == 0 else 0.82
+                score = (
+                    record.score
+                    * supporting_weight
+                    * self._document_alignment(chunk_id, signals)
+                    * self._article_alignment(chunk_id, signals)
+                )
+                raw_scores_by_chunk[chunk_id].append(score)
+                graph_paths[chunk_id].append(
+                    GraphPath(
+                        seed_entity=record.seed_entity,
+                        traversed_entities=record.traversed_entities,
+                        relation_chain=record.relation_chain,
+                        score=score,
+                    )
+                )
+        score_by_chunk: dict[str, float] = {}
+        for chunk_id, scores in raw_scores_by_chunk.items():
+            top_scores = sorted(scores, reverse=True)[:4]
+            content_alignment = self._chunk_content_alignment(chunk_id, signals)
+            score_by_chunk[chunk_id] = (sum(top_scores) / max(len(top_scores), 1)) * (1.0 + content_alignment * 0.35)
+        return score_by_chunk, dict(graph_paths)
+
+    def _build_hits(
+        self,
+        fused: dict[str, float],
+        *,
+        lexical_scores: dict[str, float],
+        vector_scores: dict[str, float],
+        graph_scores: dict[str, float],
+        metadata_scores: dict[str, float],
+        graph_paths: dict[str, list[GraphPath]],
+        top_k: int,
+    ) -> list[RetrievalHit]:
+        hits: list[RetrievalHit] = []
+        for chunk_id, score in sorted(fused.items(), key=lambda item: item[1], reverse=True)[:top_k]:
+            chunk = self.chunk_by_id[chunk_id]
+            hits.append(
+                RetrievalHit(
+                    chunk=chunk,
+                    document_name=self.document_label_by_id.get(
+                        chunk.document_id,
+                        self.document_name_by_id.get(chunk.document_id, chunk.document_id),
+                    ),
+                    text_score=lexical_scores.get(chunk_id, 0.0),
+                    vector_score=vector_scores.get(chunk_id, 0.0),
+                    graph_score=graph_scores.get(chunk_id, 0.0),
+                    metadata_score=metadata_scores.get(chunk_id, 0.0),
+                    fused_score=score,
+                    graph_paths=sorted(graph_paths.get(chunk_id, []), key=lambda item: item.score, reverse=True)[:8],
+                )
+            )
+        return hits
 
     def _analyze_question(self, question: str) -> QuerySignals:
         normalized_question = self._normalize_text(question)
@@ -428,6 +673,59 @@ class HybridRetriever:
         if document_name in signals.document_hints:
             return 1.2 + signals.document_hints[document_name] * 0.1
         return 0.7
+
+    def _article_alignment(self, chunk_id: str, signals: QuerySignals) -> float:
+        if not signals.article_refs:
+            return 1.0
+        chunk = self.chunk_by_id[chunk_id]
+        normalized_article_ref = self._normalize_article_ref(chunk.article_ref)
+        if normalized_article_ref and normalized_article_ref in signals.article_refs:
+            return 1.5
+        if chunk.article_ref:
+            return 0.42
+        return 0.68
+
+    def _chunk_content_alignment(self, chunk_id: str, signals: QuerySignals) -> float:
+        if not signals.content_tokens:
+            return 0.0
+        overlap = len(self.chunk_tokens[chunk_id] & signals.content_tokens)
+        return overlap / max(len(signals.content_tokens), 1)
+
+    def _supporting_chunks_for_path(
+        self,
+        signals: QuerySignals,
+        *,
+        source_chunk_id: str,
+        entity_id: str,
+    ) -> list[str]:
+        candidate_ids = []
+        if source_chunk_id:
+            candidate_ids.append(source_chunk_id)
+        candidate_ids.extend(sorted(self.chunk_ids_by_entity_id.get(entity_id, set())))
+
+        unique_ids: list[str] = []
+        seen: set[str] = set()
+        for chunk_id in candidate_ids:
+            if chunk_id in seen or chunk_id not in self.chunk_by_id:
+                continue
+            seen.add(chunk_id)
+            unique_ids.append(chunk_id)
+
+        ranked = sorted(
+            unique_ids,
+            key=lambda chunk_id: self._path_support_score(chunk_id, signals),
+            reverse=True,
+        )
+        filtered = [chunk_id for chunk_id in ranked if self._path_support_score(chunk_id, signals) >= 0.55]
+        selected = filtered[:3] or ranked[:1]
+        return selected
+
+    def _path_support_score(self, chunk_id: str, signals: QuerySignals) -> float:
+        return (
+            self._document_alignment(chunk_id, signals)
+            * self._article_alignment(chunk_id, signals)
+            * (1.0 + self._chunk_content_alignment(chunk_id, signals) * 0.5)
+        )
 
     def _chunk_search_text(self, chunk: ChunkRecord) -> str:
         section_title = str(chunk.metadata.get("section_title", ""))

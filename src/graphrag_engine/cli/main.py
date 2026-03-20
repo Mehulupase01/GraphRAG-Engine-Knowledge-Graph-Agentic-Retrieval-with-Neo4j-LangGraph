@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     query = subparsers.add_parser("query", help="Run a GraphRAG query")
     query.add_argument("question", help="Question to answer")
-    query.add_argument("--mode", default="hybrid", choices=["hybrid", "baseline"])
+    query.add_argument("--mode", default="hybrid", choices=["hybrid", "baseline", "path_hybrid", "path_cache"])
     query.add_argument("--top-k", type=int, default=8)
 
     subparsers.add_parser("doctor", help="Show runtime configuration and backend status")
@@ -71,6 +71,7 @@ def main() -> None:
             "processed_dirs": sorted(path.name for path in runtime.settings.processed_data_path.iterdir()),
             "neo4j_uri": runtime.settings.neo4j_uri,
             "model_backend": runtime.settings.model_backend,
+            "path_cache_entries": len(list((runtime.settings.processed_data_path / "path_cache").glob("*.json"))),
         }
         print(json.dumps(payload, indent=2))
         return

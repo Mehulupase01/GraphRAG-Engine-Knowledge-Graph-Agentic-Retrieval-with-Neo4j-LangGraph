@@ -42,6 +42,7 @@ class GraphRAGAgent:
                     "hit_count": len(hits),
                     "top_chunk_ids": [hit.chunk.chunk_id for hit in hits[:3]],
                     "sufficient": sufficient,
+                    "retrieval_meta": getattr(self.retriever, "last_retrieval_meta", {}),
                 }
             )
             if sufficient or rewrite_index >= self.settings.agent_max_rewrites:
@@ -86,6 +87,7 @@ class GraphRAGAgent:
                     "question": state.get("question", request.question),
                     "hit_count": len(hits),
                     "sufficient": sufficient,
+                    "retrieval_meta": getattr(self.retriever, "last_retrieval_meta", {}),
                 }
             )
             state["hits"] = hits

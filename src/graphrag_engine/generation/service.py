@@ -9,7 +9,7 @@ class AnswerGenerator:
         self.provider = provider
 
     def generate(self, question: str, hits: list[RetrievalHit], trace: list[dict]) -> QueryResponse:
-        evidence = [hit.chunk.text for hit in hits]
+        evidence = self._compose_evidence(hits, trace)
         payload = self.provider.generate_grounded_answer(question, evidence)
         citations = [
             Citation(
@@ -42,3 +42,38 @@ class AnswerGenerator:
             fallback_used=bool(payload.get("fallback_used", False)),
             trace=trace,
         )
+
+    def _compose_evidence(self, hits: list[RetrievalHit], trace: list[dict]) -> list[str]:
+        path_evidence = self._path_evidence_from_trace(trace)
+        chunk_evidence = [self._chunk_evidence(hit) for hit in hits]
+        return [*chunk_evidence, *path_evidence]
+
+    @staticmethod
+    def _chunk_evidence(hit: RetrievalHit) -> str:
+        article_ref = hit.chunk.article_ref or "No article reference"
+        page_span = f"{hit.chunk.page_start or '?'}-{hit.chunk.page_end or '?'}"
+        return f"Source evidence ({hit.document_name}, {article_ref}, pages {page_span}): {hit.chunk.text}"
+
+    def _path_evidence_from_trace(self, trace: list[dict]) -> list[str]:
+        path_rows: list[str] = []
+        for event in trace:
+            if event.get("step") != "retrieve":
+                continue
+            retrieval_meta = event.get("retrieval_meta", {})
+            if not isinstance(retrieval_meta, dict):
+                continue
+            for item in retrieval_meta.get("top_paths", [])[:6]:
+                if not isinstance(item, dict):
+                    continue
+                traversed_entities = item.get("traversed_entities", [])
+                relation_chain = item.get("relation_chain", [])
+                supporting_chunk_ids = item.get("supporting_chunk_ids", [])
+                chain = " -> ".join(str(entity) for entity in traversed_entities if entity)
+                relations = " | ".join(str(relation) for relation in relation_chain if relation)
+                support = ", ".join(str(chunk_id) for chunk_id in supporting_chunk_ids[:3])
+                score = float(item.get("score", 0.0))
+                if chain:
+                    path_rows.append(
+                        f"Path evidence: {chain}. Relations: {relations or 'none'}. Supporting chunks: {support or 'none'}. Path score: {score:.4f}."
+                    )
+        return path_rows

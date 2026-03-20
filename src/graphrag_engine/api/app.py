@@ -40,6 +40,13 @@ def _artifact_counts(runtime: GraphRAGRuntime) -> dict[str, int]:
     }
 
 
+def _path_cache_counts(runtime: GraphRAGRuntime) -> dict[str, int]:
+    path_cache_root = runtime.settings.processed_data_path / "path_cache"
+    return {
+        "entries": len(list(path_cache_root.glob("*.json"))),
+    }
+
+
 def _neo4j_status(runtime: GraphRAGRuntime) -> dict[str, Any]:
     if GraphDatabase is None:
         return {"available": False, "reason": "neo4j driver not installed"}
@@ -102,6 +109,7 @@ def create_app(runtime: GraphRAGRuntime | None = None):
             "provider": provider,
             "model_backend": runtime.settings.model_backend,
             "artifacts": artifacts,
+            "path_cache": _path_cache_counts(runtime),
             "neo4j": neo4j,
             "warnings": _runtime_warnings(runtime),
         }
@@ -147,6 +155,7 @@ def create_app(runtime: GraphRAGRuntime | None = None):
             "model_backend": runtime.settings.model_backend,
             "raw_files": sorted(path.name for path in runtime.settings.raw_data_path.glob("*") if path.is_file()),
             "artifact_counts": _artifact_counts(runtime),
+            "path_cache": _path_cache_counts(runtime),
             "neo4j": _neo4j_status(runtime),
             "latest_evaluation": latest_evaluation,
             "warnings": _runtime_warnings(runtime),

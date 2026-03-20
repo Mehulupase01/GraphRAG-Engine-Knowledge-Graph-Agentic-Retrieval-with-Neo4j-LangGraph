@@ -11,6 +11,8 @@ from graphrag_engine.common.settings import Settings
 
 
 class PathCacheStore:
+    CACHE_SCHEMA_VERSION = 2
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.root = ensure_dir(settings.processed_data_path / "path_cache")
@@ -26,6 +28,7 @@ class PathCacheStore:
         hop_limit: int,
     ) -> str:
         payload = {
+            "cache_schema_version": self.CACHE_SCHEMA_VERSION,
             "question": question.strip().lower(),
             "retrieval_mode": retrieval_mode,
             "article_refs": article_refs,
@@ -39,7 +42,10 @@ class PathCacheStore:
         path = self.path_for_key(cache_key)
         if not path.exists():
             return None
-        return CacheEntry.model_validate(read_json(path))
+        entry = CacheEntry.model_validate(read_json(path))
+        if int(entry.metadata.get("cache_schema_version", 0)) != self.CACHE_SCHEMA_VERSION:
+            return None
+        return entry
 
     def save(self, entry: CacheEntry) -> Path:
         return write_json(self.path_for_key(entry.cache_key), entry.model_dump())

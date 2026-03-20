@@ -3,7 +3,7 @@ from __future__ import annotations
 import altair as alt
 import streamlit as st
 
-from data_access import corpus_overview, latest_evaluation_delta, latest_evaluation_frames, load_graph_stats, load_settings, project_posture
+from data_access import corpus_overview, latest_evaluation_delta, latest_evaluation_frames, load_graph_stats, load_settings, path_cache_stats, project_posture
 from ui import configure_page, render_badges, render_card, render_doc_panel, render_success_banner, render_warning_banner, section_title
 
 
@@ -18,6 +18,7 @@ settings = load_settings()
 posture = project_posture()
 evaluation_summary, evaluation_cases, evaluation_aggregate = latest_evaluation_frames()
 evaluation_delta = latest_evaluation_delta()
+cache_stats = path_cache_stats()
 
 if posture["warnings"]:
     render_warning_banner(posture["warnings"])
@@ -29,6 +30,7 @@ render_badges(
         f"Backend: {settings['model_backend']}",
         f"Chat model: {settings['local_chat_model'] if settings['model_backend'] == 'local' else settings['chat_model']}",
         f"Raw PDFs: {posture['raw_pdf_count']}",
+        f"Path cache entries: {cache_stats['entries']}",
         "Neo4j ready" if graph_stats.get("used_neo4j") else "Neo4j pending",
     ]
 )
@@ -39,11 +41,11 @@ metric_columns[1].metric("Indexed Chunks", len(overview["chunks"]))
 metric_columns[2].metric("Canonical Entities", len(overview["entities"]))
 metric_columns[3].metric("Graph Relations", len(overview["relations"]))
 
-delta_value = evaluation_delta["delta"]
+delta_value = evaluation_delta["best_delta"]
 delta_label = f"{delta_value:+.3f}" if delta_value is not None else "n/a"
 metric_columns[4].metric(
-    "GraphRAG vs Baseline",
-    f"{evaluation_delta['graphrag']:.3f}" if evaluation_delta["graphrag"] is not None else "n/a",
+    "Best Mode vs Baseline",
+    f"{evaluation_delta['best_score']:.3f}" if evaluation_delta["best_score"] is not None else "n/a",
     delta_label,
 )
 
@@ -81,7 +83,7 @@ with tab_overview:
         )
         render_card(
             "What this app gives you",
-            "A guided home page, analyst chat, corpus explorer, operational diagnostics, benchmark evidence, and an in-app project manual for learning and demonstration.",
+            "A guided home page, analyst chat, corpus explorer, path explorer, operational diagnostics, benchmark evidence, and an in-app project manual for learning and demonstration.",
         )
 
     lower_left, lower_right = st.columns((0.95, 1.05), gap="large")
@@ -180,6 +182,10 @@ with tab_navigate:
             "Use the operations page to review ingestion jobs, graph load signals, evaluation results, artifact inventories, and runtime posture.",
         )
         render_card(
+            "Path Explorer",
+            "Use the path explorer to inspect PathCacheRAG retrieval, view ranked legal paths, watch cache hits and misses, and understand how path-centric evidence is assembled.",
+        )
+        render_card(
             "Project Guide",
             "Use the guide page for a detailed explanation of what this project is, why it exists, how to operate it, and how to release it responsibly.",
         )
@@ -194,7 +200,8 @@ This workspace is designed to be used in a loop:
 1. Check the **Home** page for system posture and benchmark status.
 2. Use **Chat** to test grounded legal questions.
 3. Use **Corpus Explorer** to inspect the exact source evidence.
-4. Use **Ops** to monitor ingestion, graph build, and evaluation artifacts.
-5. Use **Project Guide** to understand the architecture, usage, and operations workflow in detail.
+4. Use **Path Explorer** to inspect path-centric retrieval and cache behavior.
+5. Use **Ops** to monitor ingestion, graph build, evaluation artifacts, and cache posture.
+6. Use **Project Guide** to understand the architecture, usage, and operations workflow in detail.
         """
     )

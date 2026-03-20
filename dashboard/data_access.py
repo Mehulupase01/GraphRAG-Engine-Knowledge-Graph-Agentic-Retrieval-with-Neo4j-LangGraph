@@ -87,6 +87,17 @@ def load_evaluations() -> list[dict[str, Any]]:
 
 
 @st.cache_data(ttl=10, show_spinner=False)
+def load_path_cache_entries() -> list[dict[str, Any]]:
+    cache_root = PROCESSED_ROOT / "path_cache"
+    rows = []
+    for path in sorted(cache_root.glob("*.json"), reverse=True):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["_path"] = str(path)
+        rows.append(payload)
+    return rows
+
+
+@st.cache_data(ttl=10, show_spinner=False)
 def load_doc(path: str) -> str:
     doc_path = DOCS_ROOT / path
     if not doc_path.exists():
@@ -187,18 +198,72 @@ def latest_evaluation_frames() -> tuple[dict[str, Any] | None, pd.DataFrame, pd.
 def latest_evaluation_delta() -> dict[str, float | None]:
     _, _, aggregate_frame = latest_evaluation_frames()
     if aggregate_frame.empty or "approach" not in aggregate_frame.columns:
-        return {"graphrag": None, "baseline": None, "delta": None}
+        return {"baseline": None, "hybrid": None, "best_mode": None, "best_score": None, "best_delta": None}
 
     score_lookup = {
         str(row["approach"]).lower(): float(row.get("average_score", 0.0))
         for _, row in aggregate_frame.iterrows()
     }
-    graphrag = score_lookup.get("hybrid")
     baseline = score_lookup.get("baseline")
-    delta = None
-    if graphrag is not None and baseline is not None:
-        delta = graphrag - baseline
-    return {"graphrag": graphrag, "baseline": baseline, "delta": delta}
+    non_baseline = {mode: score for mode, score in score_lookup.items() if mode != "baseline"}
+    best_mode = None
+    best_score = None
+    if non_baseline:
+        best_mode, best_score = max(non_baseline.items(), key=lambda item: item[1])
+    best_delta = None
+    if baseline is not None and best_score is not None:
+        best_delta = best_score - baseline
+    return {
+        "baseline": baseline,
+        "hybrid": score_lookup.get("hybrid"),
+        "best_mode": best_mode,
+        "best_score": best_score,
+        "best_delta": best_delta,
+    }
+
+
+def path_cache_frame() -> pd.DataFrame:
+    rows = []
+    for entry in load_path_cache_entries():
+        rows.append(
+            {
+                "cache_key": entry.get("cache_key", ""),
+                "retrieval_mode": entry.get("retrieval_mode", ""),
+                "question_signature": entry.get("question_signature", ""),
+                "path_count": len(entry.get("paths", [])),
+                "top_chunk_ids": ", ".join(entry.get("top_chunk_ids", [])[:3]),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def path_cache_stats() -> dict[str, Any]:
+    entries = load_path_cache_entries()
+    retrieval_modes = Counter(entry.get("retrieval_mode", "unknown") for entry in entries)
+    return {
+        "entries": len(entries),
+        "retrieval_modes": dict(retrieval_modes),
+    }
+
+
+def path_records_from_response(response) -> list[dict[str, Any]]:
+    trace = getattr(response, "trace", [])
+    for event in trace:
+        if event.get("step") == "retrieve":
+            retrieval_meta = event.get("retrieval_meta", {})
+            if isinstance(retrieval_meta, dict):
+                return retrieval_meta.get("top_paths", [])
+    return []
+
+
+def retrieval_meta_from_response(response) -> dict[str, Any]:
+    trace = getattr(response, "trace", [])
+    for event in trace:
+        if event.get("step") == "retrieve":
+            retrieval_meta = event.get("retrieval_meta", {})
+            if isinstance(retrieval_meta, dict):
+                return retrieval_meta
+    return {}
 
 
 def artifact_frame() -> pd.DataFrame:
@@ -310,6 +375,7 @@ def chunk_detail(chunk_id: str) -> dict[str, Any]:
 def project_posture() -> dict[str, Any]:
     settings = load_settings()
     evaluation_summary, _, evaluation_aggregate = latest_evaluation_frames()
+    cache_stats = path_cache_stats()
     warnings = []
     if str(settings.get("neo4j_password", "")).strip() in {"", "change-me-now", "neo4j"}:
         warnings.append("Default Neo4j password is still configured.")
@@ -326,6 +392,7 @@ def project_posture() -> dict[str, Any]:
             "chat_model": settings.get("local_chat_model") if settings.get("model_backend") == "local" else settings.get("chat_model"),
         },
         "raw_pdf_count": len(list(RAW_ROOT.glob("*.pdf"))),
+        "path_cache_entries": cache_stats["entries"],
     }
 
 

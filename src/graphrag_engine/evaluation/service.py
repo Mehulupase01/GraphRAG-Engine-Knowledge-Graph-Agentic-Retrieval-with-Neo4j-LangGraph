@@ -22,35 +22,46 @@ class EvaluationService:
         cases = self._load_cases()
         run_id = stable_hash(str(len(cases)), prefix="eval")
         results: list[EvaluationResult] = []
-        graph_scores: list[float] = []
-        baseline_scores: list[float] = []
+        scores_by_mode: dict[str, list[float]] = {mode: [] for mode in self._evaluation_modes()}
+        path_cache_hits = 0
+        path_cache_runs = 0
 
         for case in cases:
-            baseline_response = self.agent.run(
-                QueryRequest(question=case.question, retrieval_mode="baseline", top_k=self.settings.default_retrieval_k)
-            )
-            graph_response = self.agent.run(
-                QueryRequest(question=case.question, retrieval_mode="hybrid", top_k=self.settings.default_retrieval_k)
-            )
-            baseline = self._build_result(case, baseline_response, approach="baseline")
-            graph = self._build_result(case, graph_response, approach="graphrag")
-            results.extend([baseline, graph])
-            baseline_scores.append(baseline.score)
-            graph_scores.append(graph.score)
+            for mode in self._evaluation_modes():
+                if mode == "path_cache":
+                    # Warm the cache first so this path captures actual cache-aware behavior.
+                    self.agent.run(
+                        QueryRequest(question=case.question, retrieval_mode=mode, top_k=self.settings.default_retrieval_k)
+                    )
+                response = self.agent.run(
+                    QueryRequest(question=case.question, retrieval_mode=mode, top_k=self.settings.default_retrieval_k)
+                )
+                result = self._build_result(case, response, approach=mode)
+                results.append(result)
+                scores_by_mode[mode].append(result.score)
+                if mode == "path_cache":
+                    path_cache_runs += 1
+                    retrieve_events = [event for event in response.trace if event.get("step") == "retrieve"]
+                    if retrieve_events and retrieve_events[0].get("retrieval_meta", {}).get("cache_hit"):
+                        path_cache_hits += 1
 
-        baseline_avg = statistics.fmean(baseline_scores) if baseline_scores else 0.0
-        graph_avg = statistics.fmean(graph_scores) if graph_scores else 0.0
+        baseline_avg = statistics.fmean(scores_by_mode.get("baseline", [])) if scores_by_mode.get("baseline") else 0.0
         summary = EvaluationSummary(
             run_id=run_id,
             total_cases=len(cases),
             aggregate_scores=self._aggregate_results(results),
             cases=results,
-            regressions=[] if graph_avg >= baseline_avg else ["GraphRAG underperformed baseline."],
+            regressions=self._regression_messages(scores_by_mode, baseline_avg),
             metadata={
                 "evaluation_provider": self.agent.provider.provider_name,
                 "retrieval_provider": self.agent.retriever.provider.provider_name,
                 "baseline_average": round(baseline_avg, 4),
-                "graphrag_average": round(graph_avg, 4),
+                **{
+                    f"{mode}_average": round(statistics.fmean(values), 4)
+                    for mode, values in scores_by_mode.items()
+                    if values
+                },
+                "path_cache_hit_rate": round(path_cache_hits / path_cache_runs, 4) if path_cache_runs else 0.0,
             },
         )
         write_json(self.settings.processed_data_path / "evaluation" / f"{run_id}.json", summary.model_dump())
@@ -93,3 +104,18 @@ class EvaluationService:
                 "multi_hop_accuracy": round(statistics.fmean(result.multi_hop_accuracy for result in scoped), 4),
             }
         return aggregate_scores
+
+    @staticmethod
+    def _evaluation_modes() -> list[str]:
+        return ["baseline", "hybrid", "path_hybrid", "path_cache"]
+
+    @staticmethod
+    def _regression_messages(scores_by_mode: dict[str, list[float]], baseline_avg: float) -> list[str]:
+        regressions: list[str] = []
+        for mode, values in scores_by_mode.items():
+            if mode == "baseline" or not values:
+                continue
+            average = statistics.fmean(values)
+            if average < baseline_avg:
+                regressions.append(f"{mode} underperformed baseline.")
+        return regressions
