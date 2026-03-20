@@ -108,12 +108,55 @@ This branch is successful when it can demonstrate:
 
 ## Current Status
 
-The first implementation slice in this branch has already added:
+The current branch now includes:
 
 - `path_hybrid` retrieval mode
 - `path_cache` retrieval mode
 - persistent cache entries under `data/processed/path_cache/`
-- retrieval trace metadata for path count and cache hit status
+- cache schema versioning and invalidation-safe cache keys
+- retrieval trace metadata for:
+  - path count
+  - cache hit status
+  - cache lookup latency
+  - path enumeration latency
+  - total retrieval latency
 - chat UI support for the new retrieval modes
+- a dedicated `Path Explorer` dashboard page
+- cache diagnostics in the CLI, API, and ops dashboard
+- evaluation reports that now include per-mode latency and cache-hit metrics
 
-This is the foundation, not the finished branch.
+## Current Benchmark Snapshot
+
+Latest validated PathCacheRAG branch evaluation:
+
+- `baseline average_score = 0.3491`
+- `hybrid average_score = 0.3658`
+- `path_cache average_score = 0.3556`
+- `path_hybrid average_score = 0.3556`
+
+Key operational takeaways from that snapshot:
+
+- `path_cache` is now above baseline on overall score
+- `path_cache` cache hit rate is `1.0` in the warmed benchmark path
+- `path_cache` average latency is much lower than `path_hybrid`
+- `path_hybrid` remains the more expensive exploratory mode
+
+## Operator Commands
+
+Useful branch-specific commands:
+
+- `graphrag-engine doctor`
+- `graphrag-engine path-cache-stats`
+- `graphrag-engine clear-path-cache`
+- `graphrag-engine query "..." --mode path_hybrid`
+- `graphrag-engine query "..." --mode path_cache`
+- `graphrag-engine run-eval`
+
+## Remaining Improvement Opportunities
+
+The branch is already meaningful, but the next research-quality improvements would be:
+
+- smarter path pruning for broad entities like `AI System`
+- better path textualization for low-resource local models
+- adaptive routing that automatically chooses `hybrid` vs `path_cache`
+- stronger legal-path scoring for cross-regulation questions
