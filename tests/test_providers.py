@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from graphrag_engine.common.providers import (
     AnthropicProvider,
     GeminiProvider,
     HeuristicLLMProvider,
+    LocalTransformersProvider,
     OpenAIProvider,
     build_provider,
 )
@@ -47,6 +49,12 @@ class ProviderSelectionTests(unittest.TestCase):
         provider = build_provider(settings)
         self.assertIsInstance(provider, GeminiProvider)
         self.assertEqual(provider.describe()["provider"], "gemini")
+
+    def test_explicit_local_backend_keeps_local_provider_when_local_stack_is_unavailable(self) -> None:
+        with patch("graphrag_engine.common.providers._local_stack_available", return_value=False):
+            provider = build_provider(Settings(model_backend="local"))
+        self.assertIsInstance(provider, LocalTransformersProvider)
+        self.assertEqual(provider.describe()["provider"], "local")
 
     def test_local_runtime_uses_lightweight_evaluation_provider(self) -> None:
         runtime = GraphRAGRuntime(Settings(model_backend="local"))

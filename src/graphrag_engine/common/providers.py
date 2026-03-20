@@ -854,9 +854,11 @@ def build_provider(settings: Settings) -> LLMProvider:
             return GeminiProvider(settings)
         return HeuristicLLMProvider(settings)
     if backend == "local":
-        if _local_stack_available():
-            return LocalTransformersProvider(settings)
-        return HeuristicLLMProvider(settings)
+        # An explicit local backend should keep the local-provider contract even when
+        # transformer extras are missing on lightweight environments like CI. The
+        # provider itself already degrades to heuristic behavior when local model
+        # dependencies are unavailable.
+        return LocalTransformersProvider(settings)
     if OpenAI is not None and (settings.openai_api_key or settings.openai_base_url):
         return OpenAIProvider(settings)
     if settings.anthropic_api_key:
