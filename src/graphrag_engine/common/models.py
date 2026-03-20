@@ -188,6 +188,7 @@ class EvaluationResult(BaseModel):
     answer_relevancy: float = 0.0
     multi_hop_accuracy: float = 0.0
     notes: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     response: QueryResponse
 
 

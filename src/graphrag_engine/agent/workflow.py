@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from graphrag_engine.common.models import QueryRequest, QueryResponse
 from graphrag_engine.common.providers import LLMProvider
 from graphrag_engine.common.settings import Settings
@@ -21,6 +23,7 @@ class GraphRAGAgent:
         self.generator = AnswerGenerator(provider)
 
     def run(self, request: QueryRequest) -> QueryResponse:
+        started = time.perf_counter()
         trace: list[dict] = []
         question = request.question.strip()
         rewritten_question = question
@@ -57,6 +60,15 @@ class GraphRAGAgent:
             )
 
         response = self.generator.generate(question, hits, trace)
+        total_latency_ms = round((time.perf_counter() - started) * 1000, 2)
+        response.retrieval_scores["total_query_ms"] = total_latency_ms
+        trace.append(
+            {
+                "step": "generate",
+                "answer_length": len(response.answer),
+                "total_query_ms": total_latency_ms,
+            }
+        )
         if not response.citations:
             response.fallback_used = True
         return response

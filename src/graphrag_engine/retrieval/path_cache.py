@@ -53,9 +53,22 @@ class PathCacheStore:
     def path_for_key(self, cache_key: str) -> Path:
         return self.root / f"{cache_key}.json"
 
+    def clear(self) -> dict[str, Any]:
+        removed = 0
+        for path in self.root.glob("*.json"):
+            path.unlink(missing_ok=True)
+            removed += 1
+        return {
+            "removed_entries": removed,
+            "cache_root": str(self.root),
+            "schema_version": self.CACHE_SCHEMA_VERSION,
+        }
+
     def stats(self) -> dict[str, Any]:
         entries = list(self.root.glob("*.json"))
         return {
             "entries": len(entries),
             "cache_root": str(self.root),
+            "schema_version": self.CACHE_SCHEMA_VERSION,
+            "total_size_kb": round(sum(path.stat().st_size for path in entries) / 1024, 1),
         }

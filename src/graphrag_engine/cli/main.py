@@ -25,6 +25,8 @@ def build_parser() -> argparse.ArgumentParser:
     query.add_argument("--top-k", type=int, default=8)
 
     subparsers.add_parser("doctor", help="Show runtime configuration and backend status")
+    subparsers.add_parser("path-cache-stats", help="Show persisted path cache statistics")
+    subparsers.add_parser("clear-path-cache", help="Remove all persisted path cache entries")
     subparsers.add_parser("run-eval", help="Run benchmark evaluation")
     return parser
 
@@ -64,6 +66,7 @@ def main() -> None:
 
     if args.command == "doctor":
         provider = runtime.provider.describe()
+        cache_stats = runtime.build_retriever().path_cache.stats()
         payload = {
             "provider": provider,
             "data_dir": str(runtime.settings.data_path),
@@ -71,9 +74,19 @@ def main() -> None:
             "processed_dirs": sorted(path.name for path in runtime.settings.processed_data_path.iterdir()),
             "neo4j_uri": runtime.settings.neo4j_uri,
             "model_backend": runtime.settings.model_backend,
-            "path_cache_entries": len(list((runtime.settings.processed_data_path / "path_cache").glob("*.json"))),
+            "path_cache": cache_stats,
         }
         print(json.dumps(payload, indent=2))
+        return
+
+    if args.command == "path-cache-stats":
+        stats = runtime.build_retriever().path_cache.stats()
+        print(json.dumps(stats, indent=2))
+        return
+
+    if args.command == "clear-path-cache":
+        result = runtime.build_retriever().path_cache.clear()
+        print(json.dumps(result, indent=2))
         return
 
     if args.command == "run-eval":

@@ -173,6 +173,7 @@ def latest_evaluation_frames() -> tuple[dict[str, Any] | None, pd.DataFrame, pd.
     case_rows: list[dict[str, Any]] = []
     for case in summary.get("cases", []):
         metadata = case.get("response", {}).get("trace", [])
+        case_metadata = case.get("metadata", {})
         case_rows.append(
             {
                 "case_id": case.get("case_id"),
@@ -184,6 +185,9 @@ def latest_evaluation_frames() -> tuple[dict[str, Any] | None, pd.DataFrame, pd.
                 "multi_hop_accuracy": case.get("multi_hop_accuracy", 0.0),
                 "difficulty": _notes_value(case.get("notes", []), prefix="difficulty="),
                 "trace_steps": len(metadata),
+                "latency_ms": case_metadata.get("latency_ms", 0.0),
+                "retrieval_latency_ms": case_metadata.get("retrieval_latency_ms", 0.0),
+                "cache_hit": case_metadata.get("cache_hit", False),
             }
         )
     case_frame = pd.DataFrame(case_rows)
@@ -229,6 +233,7 @@ def path_cache_frame() -> pd.DataFrame:
             {
                 "cache_key": entry.get("cache_key", ""),
                 "retrieval_mode": entry.get("retrieval_mode", ""),
+                "cache_schema_version": entry.get("metadata", {}).get("cache_schema_version", ""),
                 "question_signature": entry.get("question_signature", ""),
                 "path_count": len(entry.get("paths", [])),
                 "top_chunk_ids": ", ".join(entry.get("top_chunk_ids", [])[:3]),
@@ -242,7 +247,20 @@ def path_cache_stats() -> dict[str, Any]:
     retrieval_modes = Counter(entry.get("retrieval_mode", "unknown") for entry in entries)
     return {
         "entries": len(entries),
+        "schema_version": max(
+            (
+                int(entry.get("metadata", {}).get("cache_schema_version", 0))
+                for entry in entries
+            ),
+            default=0,
+        ),
         "retrieval_modes": dict(retrieval_modes),
+        "total_size_kb": round(
+            sum(Path(entry.get("_path", "")).stat().st_size for entry in entries if entry.get("_path")) / 1024,
+            1,
+        )
+        if entries
+        else 0.0,
     }
 
 

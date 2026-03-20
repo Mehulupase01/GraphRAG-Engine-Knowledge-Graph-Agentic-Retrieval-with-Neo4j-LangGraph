@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -139,10 +140,13 @@ class HybridRetriever:
         self.path_cache = PathCacheStore(settings)
 
     def retrieve(self, question: str, *, top_k: int | None = None, mode: str = "hybrid") -> list[RetrievalHit]:
+        retrieval_started = time.perf_counter()
         top_k = top_k or self.settings.default_retrieval_k
         signals = self._analyze_question(question)
         if mode in {"path_hybrid", "path_cache"}:
-            return self._retrieve_path_mode(question, signals, top_k=top_k, mode=mode)
+            hits = self._retrieve_path_mode(question, signals, top_k=top_k, mode=mode)
+            self.last_retrieval_meta["total_latency_ms"] = round((time.perf_counter() - retrieval_started) * 1000, 2)
+            return hits
 
         query_embedding = self.provider.embed_text(question)
         vector_scores = {
@@ -190,6 +194,7 @@ class HybridRetriever:
             "document_hints": signals.document_hints,
             "cache_hit": False,
             "path_count": 0,
+            "total_latency_ms": round((time.perf_counter() - retrieval_started) * 1000, 2),
         }
         return hits
 
@@ -329,6 +334,7 @@ class HybridRetriever:
         return dict(score_by_chunk), dict(paths)
 
     def _retrieve_path_mode(self, question: str, signals: QuerySignals, *, top_k: int, mode: str) -> list[RetrievalHit]:
+        cache_lookup_started = time.perf_counter()
         query_embedding = self.provider.embed_text(question)
         vector_scores = {
             chunk_id: cosine_similarity(query_embedding, embedding)
@@ -347,8 +353,12 @@ class HybridRetriever:
         )
         cache_entry = self.path_cache.load(cache_key) if mode == "path_cache" else None
         cache_hit = cache_entry is not None
+        cache_lookup_ms = round((time.perf_counter() - cache_lookup_started) * 1000, 2)
+        path_enumeration_ms = 0.0
         if cache_entry is None:
+            enumeration_started = time.perf_counter()
             path_records = self._enumerate_path_records(signals)
+            path_enumeration_ms = round((time.perf_counter() - enumeration_started) * 1000, 2)
             cache_entry = CacheEntry(
                 cache_key=cache_key,
                 retrieval_mode=mode,
@@ -403,6 +413,9 @@ class HybridRetriever:
             "cache_key": cache_key,
             "path_count": len(cache_entry.paths),
             "cached_entries": self.path_cache.stats()["entries"],
+            "cache_schema_version": self.path_cache.CACHE_SCHEMA_VERSION,
+            "cache_lookup_ms": cache_lookup_ms,
+            "path_enumeration_ms": path_enumeration_ms,
             "top_paths": [record.model_dump() for record in cache_entry.paths[:12]],
         }
         return hits

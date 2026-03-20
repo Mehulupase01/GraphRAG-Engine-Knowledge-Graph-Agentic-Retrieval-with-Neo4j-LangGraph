@@ -160,11 +160,34 @@ with tab_eval:
                 .encode(
                     x=alt.X("approach:N", title="Approach"),
                     y=alt.Y("average_score:Q", title="Average score"),
-                    tooltip=["approach", "average_score", "faithfulness", "context_precision", "answer_relevancy", "multi_hop_accuracy"],
+                    tooltip=[
+                        "approach",
+                        "average_score",
+                        "faithfulness",
+                        "context_precision",
+                        "answer_relevancy",
+                        "multi_hop_accuracy",
+                        "avg_latency_ms",
+                        "avg_retrieval_latency_ms",
+                        "cache_hit_rate",
+                    ],
                 )
                 .properties(height=280)
             )
             st.altair_chart(score_chart, use_container_width=True)
+
+            if "avg_latency_ms" in evaluation_aggregate.columns:
+                latency_chart = (
+                    alt.Chart(evaluation_aggregate)
+                    .mark_bar(cornerRadiusTopLeft=8, cornerRadiusTopRight=8, color="#2f7c7d")
+                    .encode(
+                        x=alt.X("approach:N", title="Approach"),
+                        y=alt.Y("avg_latency_ms:Q", title="Average end-to-end latency (ms)"),
+                        tooltip=["approach", "avg_latency_ms", "avg_retrieval_latency_ms", "cache_hit_rate"],
+                    )
+                    .properties(height=220)
+                )
+                st.altair_chart(latency_chart, use_container_width=True)
 
             if not evaluation_cases.empty:
                 boxplot = (
@@ -224,6 +247,8 @@ with tab_cache:
             "A large cache is not automatically better. What matters is whether high-value legal routes are reused and whether cache hits preserve answer quality.",
         )
         st.metric("Cache entries", cache_stats["entries"])
+        st.metric("Cache schema", cache_stats.get("schema_version", 0))
+        st.metric("Cache size", f"{cache_stats.get('total_size_kb', 0.0):.1f} KB")
         st.metric("Best evaluated mode", str(evaluation_delta["best_mode"] or "n/a"))
 
     section_title("Persisted cache entries")
