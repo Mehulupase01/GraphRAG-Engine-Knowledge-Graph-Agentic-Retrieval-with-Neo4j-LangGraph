@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from graphrag_engine.common.models import QueryRequest
+from graphrag_engine.retrieval.path_cache import PathCacheStore
 from graphrag_engine.runtime import GraphRAGRuntime
 
 
@@ -66,7 +67,7 @@ def main() -> None:
 
     if args.command == "doctor":
         provider = runtime.provider.describe()
-        cache_stats = runtime.build_retriever().path_cache.stats()
+        cache_stats = PathCacheStore(runtime.settings).stats()
         payload = {
             "provider": provider,
             "data_dir": str(runtime.settings.data_path),
@@ -80,12 +81,12 @@ def main() -> None:
         return
 
     if args.command == "path-cache-stats":
-        stats = runtime.build_retriever().path_cache.stats()
+        stats = PathCacheStore(runtime.settings).stats()
         print(json.dumps(stats, indent=2))
         return
 
     if args.command == "clear-path-cache":
-        result = runtime.build_retriever().path_cache.clear()
+        result = PathCacheStore(runtime.settings).clear()
         print(json.dumps(result, indent=2))
         return
 
