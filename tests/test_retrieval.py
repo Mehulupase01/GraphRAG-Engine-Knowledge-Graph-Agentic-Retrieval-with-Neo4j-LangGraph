@@ -491,6 +491,7 @@ class RetrievalTests(unittest.TestCase):
             )
             self.assertEqual(adaptive_route["resolved_mode"], "path_cache")
             self.assertFalse(bool(adaptive_route["cache_available"]))
+            self.assertIn("path_cache", adaptive_route["candidate_modes"])
 
             response = agent.run(
                 QueryRequest(
@@ -501,7 +502,21 @@ class RetrievalTests(unittest.TestCase):
             )
             route_events = [event for event in response.trace if event.get("step") == "route"]
             self.assertTrue(route_events)
-            self.assertEqual(route_events[0]["resolved_mode"], "path_cache")
+            self.assertEqual(route_events[0]["preselected_mode"], "path_cache")
+            self.assertEqual(route_events[0]["strategy"], "adaptive_compare")
+            self.assertGreaterEqual(len(route_events[0].get("candidate_scores", [])), 2)
+            self.assertIn(route_events[0]["resolved_mode"], {"hybrid", "path_cache"})
+
+            warmed_response = agent.run(
+                QueryRequest(
+                    question="What does Article 6 require for high-risk AI systems?",
+                    retrieval_mode="adaptive",
+                    top_k=2,
+                )
+            )
+            warmed_route_events = [event for event in warmed_response.trace if event.get("step") == "route"]
+            self.assertTrue(warmed_route_events)
+            self.assertEqual(warmed_route_events[0]["resolved_mode"], "path_cache")
 
             adaptive_route_cached = retriever.resolve_mode(
                 "What does Article 6 require for high-risk AI systems?",
@@ -511,6 +526,7 @@ class RetrievalTests(unittest.TestCase):
 
             simple_route = retriever.resolve_mode("What is GDPR?", requested_mode="adaptive")
             self.assertEqual(simple_route["resolved_mode"], "hybrid")
+            self.assertEqual(simple_route["candidate_modes"], ["hybrid"])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

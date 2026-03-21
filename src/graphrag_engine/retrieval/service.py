@@ -215,8 +215,87 @@ class HybridRetriever:
         }
         return hits
 
+    def retrieve_adaptive(self, question: str, *, top_k: int | None = None) -> tuple[list[RetrievalHit], dict[str, object]]:
+        top_k = top_k or self.settings.default_retrieval_k
+        signals = self._analyze_question(question)
+        routing = self._resolve_mode_from_signals(question, signals, requested_mode="adaptive")
+        candidate_modes = list(
+            dict.fromkeys(
+                [
+                    str(routing.get("resolved_mode", "hybrid")),
+                    *[str(mode) for mode in routing.get("candidate_modes", [])],
+                ]
+            )
+        )
+        if not candidate_modes:
+            candidate_modes = ["hybrid"]
+
+        candidate_summaries: list[dict[str, object]] = []
+        best_hits: list[RetrievalHit] = []
+        best_meta: dict[str, object] = {}
+        best_mode = str(routing.get("resolved_mode", "hybrid"))
+        best_score = float("-inf")
+        best_priority = float("-inf")
+        heuristic_mode = best_mode
+        heuristic_margin = 0.12
+
+        for mode in candidate_modes:
+            hits = self.retrieve(question, top_k=top_k, mode=mode)
+            retrieval_meta = dict(self.last_retrieval_meta)
+            candidate = self._adaptive_candidate_summary(
+                question,
+                signals,
+                mode=mode,
+                hits=hits,
+                retrieval_meta=retrieval_meta,
+            )
+            candidate_summaries.append(candidate)
+            arbitration_score = float(candidate["arbitration_score"])
+            priority = float(candidate["selection_priority"])
+            if (
+                arbitration_score > best_score + 0.03
+                or (
+                    abs(arbitration_score - best_score) <= heuristic_margin
+                    and mode == heuristic_mode
+                )
+                or (
+                    abs(arbitration_score - best_score) <= 0.03
+                    and priority > best_priority
+                )
+            ):
+                best_hits = hits
+                best_meta = retrieval_meta
+                best_mode = mode
+                best_score = arbitration_score
+                best_priority = priority
+
+        self.last_retrieval_meta = {
+            **best_meta,
+            "adaptive_selected_mode": best_mode,
+            "adaptive_selection_score": round(best_score, 4),
+            "adaptive_preselected_mode": heuristic_mode,
+            "adaptive_candidate_scores": candidate_summaries,
+        }
+        return best_hits, {
+            **routing,
+            "strategy": "adaptive_compare",
+            "resolved_mode": best_mode,
+            "preselected_mode": heuristic_mode,
+            "candidate_modes": candidate_modes,
+            "candidate_scores": candidate_summaries,
+        }
+
     def resolve_mode(self, question: str, *, requested_mode: str = "adaptive") -> dict[str, object]:
         signals = self._analyze_question(question)
+        return self._resolve_mode_from_signals(question, signals, requested_mode=requested_mode)
+
+    def _resolve_mode_from_signals(
+        self,
+        question: str,
+        signals: QuerySignals,
+        *,
+        requested_mode: str,
+    ) -> dict[str, object]:
         if requested_mode != "adaptive":
             return {
                 "requested_mode": requested_mode,
@@ -229,8 +308,8 @@ class HybridRetriever:
                 "path_signal_score": 0,
                 "cache_available": False,
                 "cache_key": None,
+                "candidate_modes": [requested_mode],
             }
-
         reasons: list[str] = []
         path_signal_score = 0
         if signals.article_refs:
@@ -268,6 +347,7 @@ class HybridRetriever:
                 "path_signal_score": path_signal_score,
                 "cache_available": cache_available,
                 "cache_key": cache_key,
+                "candidate_modes": ["hybrid", "path_cache"],
             }
 
         reasons.append("direct_lookup_prefers_hybrid")
@@ -282,6 +362,60 @@ class HybridRetriever:
             "path_signal_score": path_signal_score,
             "cache_available": False,
             "cache_key": None,
+            "candidate_modes": ["hybrid"],
+        }
+
+    def _adaptive_candidate_summary(
+        self,
+        question: str,
+        signals: QuerySignals,
+        *,
+        mode: str,
+        hits: list[RetrievalHit],
+        retrieval_meta: dict[str, object],
+    ) -> dict[str, object]:
+        top_hits = hits[: min(4, len(hits))]
+        avg_fused = sum(hit.fused_score for hit in top_hits) / max(len(top_hits), 1)
+        article_alignment = self._article_hit_alignment(top_hits, signals)
+        article_density = self._article_density(top_hits)
+        document_alignment = self._document_hit_alignment(top_hits, signals)
+        graph_density = self._graph_support_density(top_hits)
+        evidence_sufficient = self.provider.judge_evidence(question, [hit.chunk.text for hit in hits])
+        multi_hop = self._is_multi_hop_question(signals.normalized_question)
+
+        arbitration_score = avg_fused * 0.45
+        arbitration_score += article_alignment * 1.0
+        arbitration_score += document_alignment * 0.8
+        arbitration_score += article_density * (
+            0.6 if ("which article" in signals.normalized_question or "provision" in signals.normalized_question) else 0.2
+        )
+        arbitration_score += graph_density * (0.85 if multi_hop else 0.25)
+        if evidence_sufficient:
+            arbitration_score += 0.35
+        if retrieval_meta.get("cache_hit"):
+            arbitration_score += 0.08
+
+        selection_priority = 0.0
+        if evidence_sufficient:
+            selection_priority += 1.0
+        if mode == "path_cache":
+            selection_priority += article_alignment + graph_density
+        if mode == "hybrid":
+            selection_priority += avg_fused * 0.1
+
+        return {
+            "mode": mode,
+            "avg_fused": round(avg_fused, 4),
+            "article_alignment": round(article_alignment, 4),
+            "article_density": round(article_density, 4),
+            "document_alignment": round(document_alignment, 4),
+            "graph_support_density": round(graph_density, 4),
+            "evidence_sufficient": evidence_sufficient,
+            "cache_hit": bool(retrieval_meta.get("cache_hit")),
+            "latency_ms": round(float(retrieval_meta.get("total_latency_ms", 0.0)), 2),
+            "arbitration_score": round(arbitration_score, 4),
+            "selection_priority": round(selection_priority, 4),
+            "top_chunk_ids": [hit.chunk.chunk_id for hit in top_hits[:3]],
         }
 
     def _load_catalog(self) -> dict:
@@ -643,6 +777,40 @@ class HybridRetriever:
             content_alignment = self._chunk_content_alignment(chunk_id, signals)
             score_by_chunk[chunk_id] = (sum(top_scores) / max(len(top_scores), 1)) * (1.0 + content_alignment * 0.35)
         return score_by_chunk, dict(graph_paths)
+
+    def _article_hit_alignment(self, hits: list[RetrievalHit], signals: QuerySignals) -> float:
+        if not hits:
+            return 0.0
+        if signals.article_refs:
+            matches = 0
+            for hit in hits:
+                if self._normalize_article_ref(hit.chunk.article_ref) in signals.article_refs:
+                    matches += 1
+            return matches / len(hits)
+        if "which article" in signals.normalized_question or "provision" in signals.normalized_question:
+            return self._article_density(hits)
+        return 0.0
+
+    @staticmethod
+    def _article_density(hits: list[RetrievalHit]) -> float:
+        if not hits:
+            return 0.0
+        article_hits = sum(1 for hit in hits if hit.chunk.article_ref)
+        return article_hits / len(hits)
+
+    def _document_hit_alignment(self, hits: list[RetrievalHit], signals: QuerySignals) -> float:
+        if not hits or not signals.document_hints:
+            return 0.0
+        dominant_document = max(signals.document_hints, key=signals.document_hints.get)
+        matching_hits = sum(1 for hit in hits if hit.document_name == dominant_document)
+        return matching_hits / len(hits)
+
+    @staticmethod
+    def _graph_support_density(hits: list[RetrievalHit]) -> float:
+        if not hits:
+            return 0.0
+        graph_paths = sum(len(hit.graph_paths) for hit in hits)
+        return min(graph_paths / (len(hits) * 4), 1.0)
 
     def _build_hits(
         self,

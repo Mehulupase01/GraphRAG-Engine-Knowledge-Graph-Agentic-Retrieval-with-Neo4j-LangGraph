@@ -32,7 +32,10 @@ class GraphRAGAgent:
         for rewrite_index in range(self.settings.agent_max_rewrites + 1):
             resolved_mode = request.retrieval_mode
             if request.retrieval_mode == "adaptive":
-                routing = self.retriever.resolve_mode(rewritten_question, requested_mode=request.retrieval_mode)
+                hits, routing = self.retriever.retrieve_adaptive(
+                    rewritten_question,
+                    top_k=request.top_k,
+                )
                 resolved_mode = str(routing.get("resolved_mode", "hybrid"))
                 trace.append(
                     {
@@ -42,11 +45,12 @@ class GraphRAGAgent:
                         **routing,
                     }
                 )
-            hits = self.retriever.retrieve(
-                rewritten_question,
-                top_k=request.top_k,
-                mode=resolved_mode,
-            )
+            else:
+                hits = self.retriever.retrieve(
+                    rewritten_question,
+                    top_k=request.top_k,
+                    mode=resolved_mode,
+                )
             evidence = [hit.chunk.text for hit in hits]
             sufficient = self.provider.judge_evidence(question, evidence)
             trace.append(
@@ -100,9 +104,9 @@ class GraphRAGAgent:
             request: QueryRequest = state["request"]
             resolved_mode = request.retrieval_mode
             if request.retrieval_mode == "adaptive":
-                routing = self.retriever.resolve_mode(
+                hits, routing = self.retriever.retrieve_adaptive(
                     state.get("question", request.question),
-                    requested_mode=request.retrieval_mode,
+                    top_k=request.top_k,
                 )
                 resolved_mode = str(routing.get("resolved_mode", "hybrid"))
                 state.setdefault("trace", []).append(
@@ -113,11 +117,12 @@ class GraphRAGAgent:
                         **routing,
                     }
                 )
-            hits = self.retriever.retrieve(
-                state.get("question", request.question),
-                top_k=request.top_k,
-                mode=resolved_mode,
-            )
+            else:
+                hits = self.retriever.retrieve(
+                    state.get("question", request.question),
+                    top_k=request.top_k,
+                    mode=resolved_mode,
+                )
             trace = state.setdefault("trace", [])
             evidence = [hit.chunk.text for hit in hits]
             sufficient = self.provider.judge_evidence(request.question, evidence)

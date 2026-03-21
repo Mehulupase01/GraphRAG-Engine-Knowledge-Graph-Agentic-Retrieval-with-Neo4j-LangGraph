@@ -284,6 +284,14 @@ def retrieval_meta_from_response(response) -> dict[str, Any]:
     return {}
 
 
+def route_meta_from_response(response) -> dict[str, Any]:
+    trace = getattr(response, "trace", [])
+    for event in trace:
+        if event.get("step") == "route":
+            return event if isinstance(event, dict) else {}
+    return {}
+
+
 def artifact_frame() -> pd.DataFrame:
     rows = []
     for path in sorted(PROCESSED_ROOT.rglob("*")):

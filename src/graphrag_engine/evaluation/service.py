@@ -37,7 +37,9 @@ class EvaluationService:
                     should_warm = True
                 elif mode == "adaptive":
                     routing = self.agent.retriever.resolve_mode(case.question, requested_mode=mode)
-                    should_warm = str(routing.get("resolved_mode")) == "path_cache"
+                    should_warm = "path_cache" in {
+                        str(candidate_mode) for candidate_mode in routing.get("candidate_modes", [])
+                    }
                 if should_warm:
                     # Warm the cache first so this path captures actual cache-aware behavior.
                     self.agent.run(

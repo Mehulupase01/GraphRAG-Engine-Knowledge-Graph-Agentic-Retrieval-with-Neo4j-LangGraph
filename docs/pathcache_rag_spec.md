@@ -46,6 +46,7 @@ The branch should ultimately support these modes:
 - `hybrid`
 - `path_hybrid`
 - `path_cache`
+- `adaptive`
 
 ## Phase Plan
 
@@ -112,6 +113,7 @@ The current branch now includes:
 
 - `path_hybrid` retrieval mode
 - `path_cache` retrieval mode
+- `adaptive` retrieval mode that compares candidate evidence packs before selecting a final route
 - persistent cache entries under `data/processed/path_cache/`
 - cache schema versioning and invalidation-safe cache keys
 - retrieval trace metadata for:
@@ -120,8 +122,12 @@ The current branch now includes:
   - cache lookup latency
   - path enumeration latency
   - total retrieval latency
+- adaptive routing metadata for:
+  - heuristic preselection
+  - candidate arbitration scores
+  - selected retrieval mode
 - chat UI support for the new retrieval modes
-- a dedicated `Path Explorer` dashboard page
+- a dedicated `Path Explorer` dashboard page with adaptive route inspection
 - cache diagnostics in the CLI, API, and ops dashboard
 - evaluation reports that now include per-mode latency and cache-hit metrics
 
@@ -130,16 +136,20 @@ The current branch now includes:
 Latest validated PathCacheRAG branch evaluation:
 
 - `baseline average_score = 0.3491`
+- `adaptive average_score = 0.3704`
 - `hybrid average_score = 0.3658`
 - `path_cache average_score = 0.3556`
 - `path_hybrid average_score = 0.3556`
 
 Key operational takeaways from that snapshot:
 
-- `path_cache` is now above baseline on overall score
+- `adaptive` is now the strongest overall retrieval mode on this branch
+- `adaptive` outperforms both baseline and fixed-mode hybrid on the current benchmark
+- `path_cache` is above baseline on overall score and preserves the strongest repeated-query speed story
 - `path_cache` cache hit rate is `1.0` in the warmed benchmark path
 - `path_cache` average latency is much lower than `path_hybrid`
 - `path_hybrid` remains the more expensive exploratory mode
+- `adaptive` raises quality by arbitration, but its end-to-end latency is higher than fixed-mode hybrid because it evaluates multiple candidate evidence packs before answer generation
 
 ## Operator Commands
 
@@ -148,6 +158,7 @@ Useful branch-specific commands:
 - `graphrag-engine doctor`
 - `graphrag-engine path-cache-stats`
 - `graphrag-engine clear-path-cache`
+- `graphrag-engine query "..." --mode adaptive`
 - `graphrag-engine query "..." --mode path_hybrid`
 - `graphrag-engine query "..." --mode path_cache`
 - `graphrag-engine run-eval`
@@ -158,5 +169,6 @@ The branch is already meaningful, but the next research-quality improvements wou
 
 - smarter path pruning for broad entities like `AI System`
 - better path textualization for low-resource local models
-- adaptive routing that automatically chooses `hybrid` vs `path_cache`
+- adaptive routing that learns from past benchmark deltas instead of using only rule-based arbitration
 - stronger legal-path scoring for cross-regulation questions
+- optional persistence of adaptive routing analytics for offline policy tuning

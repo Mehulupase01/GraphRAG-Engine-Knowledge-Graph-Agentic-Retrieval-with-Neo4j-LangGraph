@@ -12,14 +12,21 @@ DASHBOARD_ROOT = PROJECT_ROOT / "dashboard"
 if str(DASHBOARD_ROOT) not in sys.path:
     sys.path.insert(0, str(DASHBOARD_ROOT))
 
-from data_access import SAMPLE_QUESTIONS, get_runtime, load_settings, path_records_from_response, retrieval_meta_from_response
+from data_access import (
+    SAMPLE_QUESTIONS,
+    get_runtime,
+    load_settings,
+    path_records_from_response,
+    retrieval_meta_from_response,
+    route_meta_from_response,
+)
 from ui import citation_card, configure_page, render_badges, render_card, render_doc_panel, section_title
 from graphrag_engine.common.models import QueryRequest, QueryResponse
 
 
 configure_page(
     "Path Explorer",
-    "Inspect PathCacheRAG as a first-class retrieval mode: ranked legal paths, cache hits and misses, supporting chunks, and the grounded answer that emerged from them.",
+    "Inspect PathCacheRAG as a first-class retrieval mode: ranked legal paths, cache hits and misses, adaptive routing choices, supporting chunks, and the grounded answer that emerged from them.",
 )
 
 settings = load_settings()
@@ -65,13 +72,34 @@ def _chunk_frame(response: QueryResponse) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _candidate_frame(route_meta: dict[str, object]) -> pd.DataFrame:
+    rows = []
+    for item in route_meta.get("candidate_scores", []) or []:
+        if not isinstance(item, dict):
+            continue
+        rows.append(
+            {
+                "mode": item.get("mode", ""),
+                "arbitration_score": float(item.get("arbitration_score", 0.0)),
+                "avg_fused": float(item.get("avg_fused", 0.0)),
+                "article_alignment": float(item.get("article_alignment", 0.0)),
+                "document_alignment": float(item.get("document_alignment", 0.0)),
+                "graph_support_density": float(item.get("graph_support_density", 0.0)),
+                "cache_hit": bool(item.get("cache_hit", False)),
+                "evidence_sufficient": bool(item.get("evidence_sufficient", False)),
+                "latency_ms": float(item.get("latency_ms", 0.0)),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 with st.sidebar:
     st.subheader("Path session")
     st.write(f"Backend: `{settings['model_backend']}`")
     st.write(
         f"Configured model: `{settings['local_chat_model'] if settings['model_backend'] == 'local' else settings['chat_model']}`"
     )
-    retrieval_mode = st.selectbox("Path retrieval mode", ["path_hybrid", "path_cache"], index=0)
+    retrieval_mode = st.selectbox("Path retrieval mode", ["adaptive", "path_cache", "path_hybrid"], index=0)
     top_k = st.slider("Top-k evidence", min_value=3, max_value=12, value=int(settings["default_retrieval_k"]))
     starter = st.selectbox("Choose a question", ["Custom question", *SAMPLE_QUESTIONS])
     if st.button("Clear explorer state", use_container_width=True):
@@ -86,6 +114,7 @@ render_badges(
         f"Top-k: {top_k}",
         "Path-grounded evidence",
         "Cache-aware retrieval",
+        "Adaptive arbitration" if retrieval_mode == "adaptive" else "Direct path mode",
     ]
 )
 
@@ -116,13 +145,15 @@ if response is None:
     with intro_right:
         render_card(
             "Best questions for this view",
-            "Article-specific questions, cross-regulation questions, and obligation chains are the best fit because they benefit most from graph-path retrieval rather than plain chunk ranking.",
+            "Article-specific questions, cross-regulation questions, and obligation chains are the best fit because they benefit most from graph-path retrieval rather than plain chunk ranking. In adaptive mode, the page also shows why the router picked one evidence pack over another.",
         )
     st.info("Run a path-mode question to populate the explorer.")
 else:
     retrieval_meta = retrieval_meta_from_response(response)
+    route_meta = route_meta_from_response(response)
     path_frame = _path_frame(response)
     chunk_frame = _chunk_frame(response)
+    candidate_frame = _candidate_frame(route_meta)
 
     metrics = st.columns(6)
     metrics[0].metric("Ranked paths", int(retrieval_meta.get("path_count", len(path_frame))))
@@ -130,7 +161,10 @@ else:
     metrics[2].metric("Cached entries", int(retrieval_meta.get("cached_entries", 0)))
     metrics[3].metric("Graph paths", len(response.graph_paths))
     metrics[4].metric("Citations", len(response.citations))
-    metrics[5].metric("Retrieval latency", f"{float(retrieval_meta.get('total_latency_ms', 0.0)):.1f} ms")
+    metrics[5].metric(
+        "Selected mode",
+        str(route_meta.get("resolved_mode", retrieval_meta.get("mode", retrieval_mode))),
+    )
 
     section_title("Answer alignment")
     answer_left, answer_right = st.columns((1.1, 0.9), gap="large")
@@ -149,9 +183,22 @@ else:
             "Matched entity count",
             str(retrieval_meta.get("matched_entities", 0)),
         )
+        if route_meta:
+            render_card(
+                "Adaptive route",
+                f"{route_meta.get('preselected_mode', 'n/a')} -> {route_meta.get('resolved_mode', retrieval_meta.get('mode', 'n/a'))}",
+            )
+            render_card(
+                "Routing reasons",
+                ", ".join(str(reason) for reason in route_meta.get("reasons", [])) or "No explicit reasons recorded.",
+            )
         render_card(
             "Document hints",
             ", ".join(sorted(retrieval_meta.get("document_hints", {}).keys())) or "None",
+        )
+        render_card(
+            "Retrieval latency",
+            f"{float(retrieval_meta.get('total_latency_ms', 0.0)):.1f} ms",
         )
         render_card(
             "Cache lookup latency",
@@ -162,7 +209,36 @@ else:
             f"{float(retrieval_meta.get('path_enumeration_ms', 0.0)):.1f} ms",
         )
 
-    tab_paths, tab_chunks, tab_trace = st.tabs(["Ranked Paths", "Supporting Chunks", "Trace"])
+    tab_route, tab_paths, tab_chunks, tab_trace = st.tabs(["Routing", "Ranked Paths", "Supporting Chunks", "Trace"])
+
+    with tab_route:
+        if not candidate_frame.empty:
+            chart = (
+                alt.Chart(candidate_frame)
+                .mark_bar(cornerRadiusTopLeft=8, cornerRadiusTopRight=8, color="#b55a3c")
+                .encode(
+                    x=alt.X("mode:N", title="Candidate mode"),
+                    y=alt.Y("arbitration_score:Q", title="Adaptive arbitration score"),
+                    tooltip=[
+                        "mode",
+                        "arbitration_score",
+                        "avg_fused",
+                        "article_alignment",
+                        "document_alignment",
+                        "graph_support_density",
+                        "cache_hit",
+                        "evidence_sufficient",
+                        "latency_ms",
+                    ],
+                )
+                .properties(height=260)
+            )
+            st.altair_chart(chart, use_container_width=True)
+            st.dataframe(candidate_frame, use_container_width=True, hide_index=True)
+        elif route_meta:
+            st.json(route_meta)
+        else:
+            st.info("No adaptive routing data was recorded for this run.")
 
     with tab_paths:
         if not path_frame.empty:
