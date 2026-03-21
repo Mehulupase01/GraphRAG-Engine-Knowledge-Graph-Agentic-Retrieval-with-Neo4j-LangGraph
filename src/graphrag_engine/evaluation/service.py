@@ -32,7 +32,13 @@ class EvaluationService:
 
         for case in cases:
             for mode in self._evaluation_modes():
+                should_warm = False
                 if mode == "path_cache":
+                    should_warm = True
+                elif mode == "adaptive":
+                    routing = self.agent.retriever.resolve_mode(case.question, requested_mode=mode)
+                    should_warm = str(routing.get("resolved_mode")) == "path_cache"
+                if should_warm:
                     # Warm the cache first so this path captures actual cache-aware behavior.
                     self.agent.run(
                         QueryRequest(question=case.question, retrieval_mode=mode, top_k=self.settings.default_retrieval_k)
@@ -156,7 +162,7 @@ class EvaluationService:
 
     @staticmethod
     def _evaluation_modes() -> list[str]:
-        return ["baseline", "hybrid", "path_hybrid", "path_cache"]
+        return ["baseline", "hybrid", "path_hybrid", "path_cache", "adaptive"]
 
     @staticmethod
     def _regression_messages(scores_by_mode: dict[str, list[float]], baseline_avg: float) -> list[str]:

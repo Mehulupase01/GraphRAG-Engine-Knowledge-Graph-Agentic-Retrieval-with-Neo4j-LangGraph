@@ -30,10 +30,22 @@ class GraphRAGAgent:
         hits = []
 
         for rewrite_index in range(self.settings.agent_max_rewrites + 1):
+            resolved_mode = request.retrieval_mode
+            if request.retrieval_mode == "adaptive":
+                routing = self.retriever.resolve_mode(rewritten_question, requested_mode=request.retrieval_mode)
+                resolved_mode = str(routing.get("resolved_mode", "hybrid"))
+                trace.append(
+                    {
+                        "step": "route",
+                        "attempt": rewrite_index,
+                        "question": rewritten_question,
+                        **routing,
+                    }
+                )
             hits = self.retriever.retrieve(
                 rewritten_question,
                 top_k=request.top_k,
-                mode=request.retrieval_mode,
+                mode=resolved_mode,
             )
             evidence = [hit.chunk.text for hit in hits]
             sufficient = self.provider.judge_evidence(question, evidence)
@@ -45,6 +57,8 @@ class GraphRAGAgent:
                     "hit_count": len(hits),
                     "top_chunk_ids": [hit.chunk.chunk_id for hit in hits[:3]],
                     "sufficient": sufficient,
+                    "requested_mode": request.retrieval_mode,
+                    "resolved_mode": resolved_mode,
                     "retrieval_meta": getattr(self.retriever, "last_retrieval_meta", {}),
                 }
             )
@@ -84,10 +98,25 @@ class GraphRAGAgent:
 
         def retrieve(state: AgentState) -> AgentState:
             request: QueryRequest = state["request"]
+            resolved_mode = request.retrieval_mode
+            if request.retrieval_mode == "adaptive":
+                routing = self.retriever.resolve_mode(
+                    state.get("question", request.question),
+                    requested_mode=request.retrieval_mode,
+                )
+                resolved_mode = str(routing.get("resolved_mode", "hybrid"))
+                state.setdefault("trace", []).append(
+                    {
+                        "step": "route",
+                        "attempt": state.get("attempt", 0),
+                        "question": state.get("question", request.question),
+                        **routing,
+                    }
+                )
             hits = self.retriever.retrieve(
                 state.get("question", request.question),
                 top_k=request.top_k,
-                mode=request.retrieval_mode,
+                mode=resolved_mode,
             )
             trace = state.setdefault("trace", [])
             evidence = [hit.chunk.text for hit in hits]
@@ -99,6 +128,8 @@ class GraphRAGAgent:
                     "question": state.get("question", request.question),
                     "hit_count": len(hits),
                     "sufficient": sufficient,
+                    "requested_mode": request.retrieval_mode,
+                    "resolved_mode": resolved_mode,
                     "retrieval_meta": getattr(self.retriever, "last_retrieval_meta", {}),
                 }
             )

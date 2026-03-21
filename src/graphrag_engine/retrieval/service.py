@@ -81,6 +81,23 @@ DOCUMENT_HINT_RULES: dict[str, tuple[tuple[str, float], ...]] = {
         ("illegal content", 0.8),
     ),
 }
+MULTI_HOP_HINTS = (
+    "how do",
+    "how does",
+    "connect",
+    "relationship",
+    "relate",
+    "between",
+    "compare",
+    "depends on",
+    "relevant when",
+    "which article",
+    "linked to",
+    "overlap",
+    "conflict",
+    "across",
+    "interaction",
+)
 
 
 @dataclass(slots=True)
@@ -197,6 +214,75 @@ class HybridRetriever:
             "total_latency_ms": round((time.perf_counter() - retrieval_started) * 1000, 2),
         }
         return hits
+
+    def resolve_mode(self, question: str, *, requested_mode: str = "adaptive") -> dict[str, object]:
+        signals = self._analyze_question(question)
+        if requested_mode != "adaptive":
+            return {
+                "requested_mode": requested_mode,
+                "resolved_mode": requested_mode,
+                "strategy": "manual",
+                "reasons": ["explicit_mode_selected"],
+                "article_refs": sorted(signals.article_refs),
+                "document_hints": signals.document_hints,
+                "matched_entities": len(signals.matched_entity_scores),
+                "path_signal_score": 0,
+                "cache_available": False,
+                "cache_key": None,
+            }
+
+        reasons: list[str] = []
+        path_signal_score = 0
+        if signals.article_refs:
+            path_signal_score += 2
+            reasons.append("article_anchor_detected")
+        if self._is_multi_hop_question(signals.normalized_question):
+            path_signal_score += 2
+            reasons.append("multi_hop_reasoning_detected")
+        if self._is_cross_regulation_question(signals):
+            path_signal_score += 2
+            reasons.append("cross_regulation_scope_detected")
+        if len(signals.matched_entity_scores) >= 4:
+            path_signal_score += 1
+            reasons.append("dense_entity_match")
+
+        if path_signal_score >= 2:
+            cache_key = self.path_cache.build_cache_key(
+                question=question,
+                retrieval_mode="path_cache",
+                article_refs=sorted(signals.article_refs),
+                document_hints=signals.document_hints,
+                matched_entity_ids=sorted(signals.matched_entity_scores),
+                hop_limit=self.settings.agent_max_graph_hops,
+            )
+            cache_available = self.path_cache.load(cache_key) is not None
+            reasons.append("cache_hit_available" if cache_available else "cache_will_be_populated")
+            return {
+                "requested_mode": requested_mode,
+                "resolved_mode": "path_cache",
+                "strategy": "adaptive",
+                "reasons": reasons,
+                "article_refs": sorted(signals.article_refs),
+                "document_hints": signals.document_hints,
+                "matched_entities": len(signals.matched_entity_scores),
+                "path_signal_score": path_signal_score,
+                "cache_available": cache_available,
+                "cache_key": cache_key,
+            }
+
+        reasons.append("direct_lookup_prefers_hybrid")
+        return {
+            "requested_mode": requested_mode,
+            "resolved_mode": "hybrid",
+            "strategy": "adaptive",
+            "reasons": reasons,
+            "article_refs": sorted(signals.article_refs),
+            "document_hints": signals.document_hints,
+            "matched_entities": len(signals.matched_entity_scores),
+            "path_signal_score": path_signal_score,
+            "cache_available": False,
+            "cache_key": None,
+        }
 
     def _load_catalog(self) -> dict:
         path = self.settings.processed_data_path / "graph" / "graph_catalog.json"
@@ -739,6 +825,14 @@ class HybridRetriever:
             * self._article_alignment(chunk_id, signals)
             * (1.0 + self._chunk_content_alignment(chunk_id, signals) * 0.5)
         )
+
+    @staticmethod
+    def _is_multi_hop_question(normalized_question: str) -> bool:
+        return any(hint in normalized_question for hint in MULTI_HOP_HINTS)
+
+    @staticmethod
+    def _is_cross_regulation_question(signals: QuerySignals) -> bool:
+        return len(signals.document_hints) > 1
 
     def _chunk_search_text(self, chunk: ChunkRecord) -> str:
         section_title = str(chunk.metadata.get("section_title", ""))
