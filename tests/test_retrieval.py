@@ -4,8 +4,9 @@ import shutil
 import unittest
 from pathlib import Path
 
+from graphrag_engine.agent.workflow import GraphRAGAgent
 from graphrag_engine.common.artifacts import write_json, write_jsonl
-from graphrag_engine.common.models import ChunkRecord, DocumentRecord, EntityRecord, RelationRecord
+from graphrag_engine.common.models import ChunkRecord, DocumentRecord, EntityRecord, QueryRequest, RelationRecord
 from graphrag_engine.common.providers import HeuristicLLMProvider
 from graphrag_engine.common.settings import Settings
 from graphrag_engine.graph.loader import GraphLoader
@@ -391,6 +392,125 @@ class RetrievalTests(unittest.TestCase):
             self.assertEqual(hits[0].chunk.chunk_id, "chunk-ai-6-main")
             self.assertGreater(hits[0].graph_score, 0.0)
             self.assertGreaterEqual(hits[0].text_score, hits[1].text_score)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_adaptive_routing_prefers_path_cache_for_article_questions_and_hybrid_for_simple_lookup(self) -> None:
+        tmp = Path.cwd() / "data" / "cache" / "test_adaptive_routing_case"
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        tmp.mkdir(parents=True, exist_ok=True)
+        try:
+            settings = Settings(data_dir=str(tmp))
+            graph_dir = settings.processed_data_path / "graph"
+            ai_act = DocumentRecord(document_id="doc-ai", name="OJ_L_202401689_EN_TXT", source_path="x", checksum="1")
+            gdpr = DocumentRecord(document_id="doc-gdpr", name="CELEX_32016R0679_EN_TXT", source_path="y", checksum="2")
+            ai_chunk = ChunkRecord(
+                chunk_id="chunk-ai-6",
+                document_id="doc-ai",
+                section_id="sec-ai-6",
+                article_ref="Article 6",
+                text="Article 6 Classification rules for high-risk AI systems. Providers shall ensure conformity assessment for high-risk AI systems before placing them on the market.",
+                text_hash="hash-ai",
+                metadata={"section_title": "Article 6"},
+            )
+            gdpr_chunk = ChunkRecord(
+                chunk_id="chunk-gdpr-1",
+                document_id="doc-gdpr",
+                section_id="sec-gdpr-1",
+                article_ref="Article 1",
+                text="GDPR protects personal data and establishes rules for processing by controllers and processors.",
+                text_hash="hash-gdpr",
+                metadata={"section_title": "Article 1"},
+            )
+            write_json(
+                graph_dir / "graph_catalog.json",
+                {
+                    "documents": [ai_act.model_dump(), gdpr.model_dump()],
+                    "chunks": [ai_chunk.model_dump(), gdpr_chunk.model_dump()],
+                    "entities": [
+                        EntityRecord(
+                            entity_id="ent-ai-act",
+                            canonical_name="AI Act",
+                            raw_name="AI Act",
+                            entity_type="regulation",
+                            source_chunk_id="chunk-ai-6",
+                            metadata={"mention_chunk_ids": ["chunk-ai-6"], "document_ids": ["doc-ai"]},
+                        ).model_dump(),
+                        EntityRecord(
+                            entity_id="ent-gdpr",
+                            canonical_name="GDPR",
+                            raw_name="GDPR",
+                            entity_type="regulation",
+                            source_chunk_id="chunk-gdpr-1",
+                            metadata={"mention_chunk_ids": ["chunk-gdpr-1"], "document_ids": ["doc-gdpr"]},
+                        ).model_dump(),
+                        EntityRecord(
+                            entity_id="ent-article-6",
+                            canonical_name="Article 6",
+                            raw_name="Article 6",
+                            entity_type="article",
+                            source_chunk_id="chunk-ai-6",
+                            metadata={"mention_chunk_ids": ["chunk-ai-6"]},
+                        ).model_dump(),
+                        EntityRecord(
+                            entity_id="ent-high-risk",
+                            canonical_name="High-Risk AI System",
+                            raw_name="high-risk AI systems",
+                            entity_type="risk_class",
+                            source_chunk_id="chunk-ai-6",
+                            metadata={"mention_chunk_ids": ["chunk-ai-6"]},
+                        ).model_dump(),
+                    ],
+                    "relations": [
+                        RelationRecord(
+                            relation_id="rel-ai-1",
+                            subject_entity_id="ent-article-6",
+                            object_entity_id="ent-high-risk",
+                            relation_type="requires",
+                            source_chunk_id="chunk-ai-6",
+                            confidence=0.9,
+                        ).model_dump()
+                    ],
+                    "communities": {"ent-ai-act": 0, "ent-gdpr": 1, "ent-article-6": 0, "ent-high-risk": 0},
+                    "mentions": [
+                        {"chunk_id": "chunk-ai-6", "entity_id": "ent-ai-act"},
+                        {"chunk_id": "chunk-ai-6", "entity_id": "ent-article-6"},
+                        {"chunk_id": "chunk-ai-6", "entity_id": "ent-high-risk"},
+                        {"chunk_id": "chunk-gdpr-1", "entity_id": "ent-gdpr"},
+                    ],
+                },
+            )
+            provider = HeuristicLLMProvider(settings)
+            retriever = HybridRetriever(settings, provider)
+            agent = GraphRAGAgent(settings, provider, retriever)
+
+            adaptive_route = retriever.resolve_mode(
+                "What does Article 6 require for high-risk AI systems?",
+                requested_mode="adaptive",
+            )
+            self.assertEqual(adaptive_route["resolved_mode"], "path_cache")
+            self.assertFalse(bool(adaptive_route["cache_available"]))
+
+            response = agent.run(
+                QueryRequest(
+                    question="What does Article 6 require for high-risk AI systems?",
+                    retrieval_mode="adaptive",
+                    top_k=2,
+                )
+            )
+            route_events = [event for event in response.trace if event.get("step") == "route"]
+            self.assertTrue(route_events)
+            self.assertEqual(route_events[0]["resolved_mode"], "path_cache")
+
+            adaptive_route_cached = retriever.resolve_mode(
+                "What does Article 6 require for high-risk AI systems?",
+                requested_mode="adaptive",
+            )
+            self.assertTrue(bool(adaptive_route_cached["cache_available"]))
+
+            simple_route = retriever.resolve_mode("What is GDPR?", requested_mode="adaptive")
+            self.assertEqual(simple_route["resolved_mode"], "hybrid")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

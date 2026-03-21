@@ -116,10 +116,10 @@ with st.sidebar:
     st.write(
         f"Configured model: `{settings['local_chat_model'] if settings['model_backend'] == 'local' else settings['chat_model']}`"
     )
-    compare_mode = st.checkbox("Compare hybrid vs baseline", value=True)
+    compare_mode = st.checkbox("Compare adaptive vs baseline", value=True)
     retrieval_mode = st.selectbox(
         "Primary retrieval mode",
-        ["hybrid", "baseline", "path_hybrid", "path_cache"],
+        ["adaptive", "hybrid", "baseline", "path_hybrid", "path_cache"],
         index=0,
         disabled=compare_mode,
     )
@@ -135,9 +135,9 @@ default_question = starter if starter != "Custom question" else st.session_state
 
 render_badges(
     [
-        "Hybrid compare mode" if compare_mode else f"Single mode: {retrieval_mode}",
+        "Adaptive compare mode" if compare_mode else f"Single mode: {retrieval_mode}",
         f"Top-k: {top_k}",
-        "PathCacheRAG modes available",
+        "Adaptive routing enabled",
         "Grounded legal QA",
     ]
 )
@@ -152,7 +152,7 @@ question = st.text_area(
 run_now = st.button("Run grounded query", type="primary", use_container_width=True)
 
 if run_now and question.strip():
-    requested_modes = ["hybrid", "baseline"] if compare_mode else [retrieval_mode]
+    requested_modes = ["adaptive", "baseline"] if compare_mode else [retrieval_mode]
     results: dict[str, QueryResponse] = {}
     with st.spinner("Running retrieval, graph traversal, and grounded answer synthesis..."):
         for mode in requested_modes:
@@ -179,7 +179,7 @@ if not query_runs:
     with intro_left:
         render_card(
             "Compare mode",
-            "Runs the same question through hybrid GraphRAG and the baseline path so you can see whether graph-aware retrieval actually improved the answer.",
+            "Runs the same question through adaptive PathCacheRAG and the baseline path so you can see whether cache-aware graph routing improved the answer.",
         )
     with intro_right:
         render_card(
@@ -194,25 +194,25 @@ else:
         st.dataframe(pd.DataFrame(history), use_container_width=True, hide_index=True)
 
     modes = list(query_runs.keys())
-    if set(modes) == {"hybrid", "baseline"}:
+    if set(modes) == {"adaptive", "baseline"}:
         comparison_columns = st.columns(2, gap="large")
         with comparison_columns[0]:
-            render_response_panel("Hybrid GraphRAG", query_runs["hybrid"])
+            render_response_panel("Adaptive PathCacheRAG", query_runs["adaptive"])
         with comparison_columns[1]:
             render_response_panel("Baseline Retrieval", query_runs["baseline"])
 
-        hybrid_conf = query_runs["hybrid"].confidence
+        hybrid_conf = query_runs["adaptive"].confidence
         baseline_conf = query_runs["baseline"].confidence
         comparison_metrics = st.columns(4)
-        comparison_metrics[0].metric("Hybrid citations", len(query_runs["hybrid"].citations))
+        comparison_metrics[0].metric("Adaptive citations", len(query_runs["adaptive"].citations))
         comparison_metrics[1].metric("Baseline citations", len(query_runs["baseline"].citations))
         comparison_metrics[2].metric("Confidence delta", f"{hybrid_conf - baseline_conf:+.2f}")
         comparison_metrics[3].metric(
             "Graph path delta",
-            f"{len(query_runs['hybrid'].graph_paths) - len(query_runs['baseline'].graph_paths):+d}",
+            f"{len(query_runs['adaptive'].graph_paths) - len(query_runs['baseline'].graph_paths):+d}",
         )
 
-        compare_tab, hybrid_tab, baseline_tab = st.tabs(["Comparison", "Hybrid Detail", "Baseline Detail"])
+        compare_tab, hybrid_tab, baseline_tab = st.tabs(["Comparison", "Adaptive Detail", "Baseline Detail"])
         with compare_tab:
             compare_rows = []
             for mode_name, response in query_runs.items():
@@ -227,7 +227,7 @@ else:
                 )
             st.dataframe(pd.DataFrame(compare_rows), use_container_width=True, hide_index=True)
         with hybrid_tab:
-            render_response_details(query_runs["hybrid"], panel_key="hybrid")
+            render_response_details(query_runs["adaptive"], panel_key="adaptive")
         with baseline_tab:
             render_response_details(query_runs["baseline"], panel_key="baseline")
     else:
