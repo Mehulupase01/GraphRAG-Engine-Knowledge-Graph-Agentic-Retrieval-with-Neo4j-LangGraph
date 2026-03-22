@@ -2,52 +2,66 @@
 
 ## What This Project Is
 
-F-GEN-1 GraphRAG Engine is a local-first regulatory intelligence platform built around three EU legal corpora:
+This repository is a local-first regulatory intelligence platform built around:
 
-- The EU AI Act
+- the EU AI Act
 - GDPR
-- The Digital Services Act
+- the Digital Services Act
 
-The project is not a toy chatbot or a plain vector-search demo. It is a production-style GraphRAG system that parses raw legal PDFs, converts them into graph-aware knowledge artifacts, and answers questions with traceable evidence.
+It starts as a strong GraphRAG system, then extends that base with a PathCacheRAG branch that adds path-centric retrieval, persistent path caching, and adaptive route selection.
 
 ## What It Is For
 
-This system is designed for:
+This project is designed to be useful in multiple ways:
 
-- portfolio-grade demonstration of GraphRAG engineering
-- experimenting with multi-hop retrieval on legal corpora
-- building a regulatory assistant that can show provenance
-- comparing baseline RAG against graph-augmented retrieval
-- learning how ingestion, extraction, graph modeling, retrieval, evaluation, and product UX fit together
+- a flagship portfolio project for retrieval and graph engineering
+- a serious end-to-end AI product build
+- a legal assistant that can answer with evidence and provenance
+- an evaluation environment for comparing retrieval strategies
+- a learning environment for ingestion, extraction, graph modeling, APIs, dashboards, and deployment
 
 ## Core Product Promise
 
-The application should be able to:
+The application can:
 
-- ingest official legal texts from raw PDFs
-- preserve article-level provenance and page references
-- extract legal entities and relationships
+- ingest official legal PDFs
+- preserve article-level provenance
+- extract entities and relations
 - build a Neo4j-backed knowledge graph
-- combine lexical, vector, and graph retrieval
-- answer questions with grounded evidence and citations
-- expose the system through CLI, API, and an interactive dashboard
+- answer questions through multiple retrieval modes
+- expose answers with citations, graph paths, and traces
+- compare fixed-mode and adaptive retrieval strategies through a real benchmark
 
-## What Makes It Different From Plain RAG
+## What Makes PathCacheRAG Different
 
-Plain RAG often retrieves semantically similar text chunks but struggles when the answer depends on connected legal concepts or cross-references.
+Plain RAG retrieves chunks.
 
-This project improves on that by combining:
+GraphRAG retrieves chunks plus graph signals.
 
-- article-aware chunking
-- extracted entity and relation structure
-- graph traversal over related concepts
-- hybrid rank fusion
-- agentic evidence checks and query rewrites
+PathCacheRAG goes one step further and treats graph paths as first-class evidence. It can:
 
-## Current Constraints
+- enumerate candidate legal paths
+- score them against article anchors and document hints
+- cache reusable path evidence packs
+- compare hybrid and path-aware evidence before choosing a final route
 
-The project is strong and working, but there are still honest limitations:
+## Current Validated Snapshot
 
-- the local benchmark uses a lightweight evaluation path to stay practical on consumer hardware
-- external provider backends are implemented, but not all are live-validated without user-supplied keys
-- security hardening is optional/configurable and should be tightened before a real internet-facing deployment
+At the current validated branch snapshot:
+
+- `3` regulations are ingested
+- `1319` chunks are indexed
+- `557` canonical entities are present
+- `3408` relations are present
+- `147` graph communities are detected
+- `54` benchmark cases are stored
+- `21` tests are passing in the validated environment
+
+## Honest Constraints
+
+This is a strong project, but there are still real constraints:
+
+- local generation is slower than hosted frontier APIs
+- adaptive mode can improve answer quality while costing more total latency
+- external providers need real keys for live validation
+- internet-facing deployment still needs stronger auth and security hardening than local-first usage

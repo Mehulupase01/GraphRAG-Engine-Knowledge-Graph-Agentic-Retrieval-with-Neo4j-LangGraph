@@ -16,16 +16,18 @@ from ui import configure_page, render_badges, render_doc_panel, section_title
 
 configure_page(
     "Project Guide",
-    "A built-in reference manual for what this GraphRAG system is, why it exists, how to use it, and how to operate it responsibly.",
+    "A built-in reference manual for what this GraphRAG and PathCacheRAG system is, why it exists, how to use it, how to reproduce results, and how to operate it responsibly.",
 )
 
 render_badges(
     [
         "Project overview",
         "Architecture",
+        "PathCacheRAG spec",
         "User guide",
         "Operations runbook",
         "Release checklist",
+        "Reproduce results",
     ]
 )
 
@@ -36,22 +38,34 @@ Use this page like an internal handbook:
 
 - **Project Overview** explains the product and its purpose.
 - **Architecture** explains how the ingestion, graph, retrieval, and agent layers fit together.
+- **PathCacheRAG Spec** explains the branch-level retrieval innovation and benchmark posture.
 - **User Guide** explains how to use the dashboard, API, and CLI.
 - **Operations Runbook** explains how to run and maintain the system.
 - **Release Checklist** explains what to verify before you call the project ready.
+- **Reproduce Results** explains how to verify the README numbers and benchmark artifacts yourself.
     """
 )
 
 tabs = st.tabs(
-    ["Project Overview", "Architecture", "User Guide", "Operations Runbook", "Release Checklist"]
+    [
+        "Project Overview",
+        "Architecture",
+        "PathCacheRAG Spec",
+        "User Guide",
+        "Operations Runbook",
+        "Release Checklist",
+        "Reproduce Results",
+    ]
 )
 
 doc_specs = [
     ("project_overview.md", tabs[0]),
     ("architecture.md", tabs[1]),
-    ("user_guide.md", tabs[2]),
-    ("operations_runbook.md", tabs[3]),
-    ("release_checklist.md", tabs[4]),
+    ("pathcache_rag_spec.md", tabs[2]),
+    ("user_guide.md", tabs[3]),
+    ("operations_runbook.md", tabs[4]),
+    ("release_checklist.md", tabs[5]),
+    ("reproduce_results.md", tabs[6]),
 ]
 
 for doc_name, tab in doc_specs:

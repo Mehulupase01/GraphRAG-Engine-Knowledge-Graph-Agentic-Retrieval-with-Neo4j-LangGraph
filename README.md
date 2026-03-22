@@ -1,13 +1,16 @@
-# GraphRAG Engine
+# GraphRAG Engine / PathCacheRAG
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![Neo4j](https://img.shields.io/badge/Neo4j-Graph%20Database-008CC1?logo=neo4j&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?logo=streamlit&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-Agentic%20Workflow-1C3C3C)
-![License](https://img.shields.io/badge/License-MIT-green)
+![Branch](https://img.shields.io/badge/Branch-PathCacheRAG-B55A3C)
 
-Production-style GraphRAG for the EU AI Act, GDPR, and the Digital Services Act, with article-aware ingestion, graph construction, hybrid retrieval, provenance-grounded answers, a FastAPI service, a modular Streamlit workspace, and a benchmark harness that compares GraphRAG against a simpler baseline.
+Production-style regulatory intelligence over the EU AI Act, GDPR, and the Digital Services Act, with two connected retrieval stories:
+
+- a strong hybrid GraphRAG baseline
+- a PathCacheRAG branch that adds path-centric retrieval, persistent path caching, and adaptive evidence arbitration
 
 ## Table Of Contents
 
@@ -21,118 +24,255 @@ Production-style GraphRAG for the EU AI Act, GDPR, and the Digital Services Act,
 
 ## Short Abstract
 
-This project is a local-first regulatory intelligence system. It reads raw EU legal PDFs, breaks them into article-aware chunks, extracts entities and relationships, builds a knowledge graph in Neo4j, and answers user questions using a hybrid retrieval strategy that combines vector search, lexical matching, and graph traversal.
+This repository turns three dense EU regulations into a queryable legal intelligence system. It ingests the official PDFs, performs article-aware chunking, extracts entities and relations, builds a Neo4j-backed knowledge graph, and answers questions with citations and graph evidence.
 
-In simple terms, this is not just "search over PDFs." It is a system that tries to understand how concepts in the law connect to each other, then uses those connections to produce answers with citations and traceable evidence.
+The PathCacheRAG branch extends that base system with a more novel retrieval design:
 
-At the time of this validated snapshot on **March 19, 2026**, the repository contains:
+- graph paths become first-class evidence
+- repeated legal routes are cached as reusable path packs
+- an adaptive router compares candidate retrieval modes before choosing the final evidence path
 
-- `3` ingested regulations
-- `1319` indexed chunks
-- `557` extracted entities
-- `3408` extracted relationships
-- `147` detected graph communities
-- `54` benchmark cases comparing GraphRAG to a baseline retrieval path
-- `17` passing unit and integration tests in the project environment
+This is not a template or toy demo. It is a real local-first project with a working dashboard, CLI, API, graph build pipeline, evaluation harness, reproducibility docs, and release-oriented engineering structure.
 
-The latest stored benchmark shows GraphRAG outperforming the baseline on overall score, context precision, answer relevancy, and multi-hop accuracy.
+Current validated snapshot for this branch:
+
+| Signal | Value |
+| --- | ---: |
+| Source regulations | `3` |
+| Indexed chunks | `1319` |
+| Canonical entities | `557` |
+| Relations | `3408` |
+| Graph communities | `147` |
+| Evaluation cases | `54` |
+| Passing tests | `21` |
+| Best benchmark mode | `adaptive` |
 
 ## Deep Introduction
 
 ### What problem this project solves
 
-Large legal documents are hard to use well.
+Legal texts are public, but that does not make them easy to use.
 
-Even when a document is public and searchable, finding the *right* answer is difficult because:
+Even when a regulation is searchable, the real answer often depends on:
 
-- the answer may be split across multiple articles
-- one article may define a concept while another article sets the obligation
-- legal language often depends on cross-references and exceptions
-- plain keyword search can retrieve the right words but the wrong legal meaning
+- a specific article anchor
+- a definition in one place and an obligation in another
+- cross-references to annexes or adjacent provisions
+- relationships between actors, systems, risks, and duties
 
-This project is built to address that problem.
+Normal retrieval-augmented generation often stops at "this chunk looks similar to your question." That is useful, but it is not enough for regulation-heavy reasoning.
 
-Instead of treating the law as one long document, the system turns it into a structured knowledge base:
+This project pushes further by treating the corpus as both:
 
-- documents become sections and chunks
-- chunks become evidence units with provenance
-- important concepts become entities
-- relationships between concepts become graph edges
-- the final answer is generated from retrieved evidence rather than free-floating model memory
+- text that can be searched semantically and lexically
+- a graph of connected legal concepts that can be traversed, ranked, and explained
 
 ### What GraphRAG means in plain English
 
-If you are new to GraphRAG, here is the simplest way to think about it:
+The simplest explanation is:
 
-- **Normal RAG** finds text that looks similar to your question.
-- **GraphRAG** still does that, but it also keeps a map of how concepts connect.
+- plain RAG retrieves chunks
+- GraphRAG retrieves chunks plus structure
 
-Imagine asking:
+If you ask:
 
-> "What does Article 6 require for high-risk AI systems?"
+> What does Article 6 require for high-risk AI systems?
 
-A plain RAG system might retrieve any chunk mentioning "high-risk AI systems."
+a plain retriever may fetch any paragraph containing "high-risk AI systems."
 
-A GraphRAG system can do more:
+This system instead tries to:
 
-- identify that `Article 6` is a specific legal anchor
-- prioritize AI Act chunks instead of unrelated regulations
-- follow links from `Article 6` to `AI system`, `high-risk`, `Annex III`, or related obligations
-- rank evidence using both semantic similarity and graph structure
-- return the answer with the exact supporting chunks and graph paths
+- recognize `Article 6` as a legal anchor
+- prioritize the correct regulation
+- follow graph relationships from that anchor to related obligations and concepts
+- rank evidence using both text similarity and graph signals
+- generate an answer from grounded evidence only
 
-That is the core idea behind this repository.
+### What PathCacheRAG adds
 
-### What this project is for
+PathCacheRAG is the branch-level innovation in this repository.
 
-This project serves several purposes at once:
+Instead of only asking "which chunks look relevant?", it can also ask:
 
-- a flagship portfolio project for GraphRAG engineering
-- a serious demonstration of end-to-end AI product building
-- a legal and regulatory question-answering system over official EU law
-- a benchmark environment for comparing plain RAG vs graph-augmented retrieval
-- a learning tool for understanding ingestion, graph modeling, retrieval, evaluation, APIs, dashboards, and deployment
+- which graph paths best explain this legal question?
+- have we already seen and cached a similar legal route?
+- if multiple retrieval modes disagree, which evidence pack looks stronger?
 
-### What makes this repo different from a demo
+That leads to a system that is more:
 
-This repository is intentionally built like a product, not like a notebook experiment.
+- interpretable
+- reusable on repeated legal questions
+- interesting as a research or portfolio artifact
+- aligned with multi-hop legal reasoning
 
-It includes:
+### What this repository is for
 
-- structured source code under `src/`
-- typed models and settings
-- CLI commands for operators
-- FastAPI endpoints for programmatic access
-- a Streamlit application for end users and operators
-- Docker Compose for local orchestration
-- health endpoints
-- evaluation fixtures and benchmark output
-- tests and release notes
-- in-app documentation
+This repo serves several real purposes:
 
-### Current validated corpus snapshot
+- a flagship GraphRAG and PathCacheRAG engineering project
+- a serious portfolio system for AI, backend, and applied retrieval work
+- a local-first legal intelligence app
+- a benchmark environment for comparing retrieval strategies
+- a learning platform for ingestion, graph modeling, evaluation, UI, APIs, and deployment
 
-The current corpus and graph artifacts in the repository reflect:
+## The Entire System Explained
 
-| Corpus / graph signal | Current validated value |
-| --- | ---: |
-| Documents | `3` |
-| Total chunks | `1319` |
-| Entities | `557` |
-| Relations | `3408` |
-| Communities | `147` |
-| Neo4j load | `true` |
-
-Chunk distribution across the three regulations:
+### System Map
 
 ```mermaid
-pie title Corpus Chunk Distribution
+flowchart LR
+    A["Official EU PDFs"] --> B["PDF parsing and article detection"]
+    B --> C["Chunking with provenance"]
+    C --> D["Entity and relation extraction"]
+    D --> E["Graph artifacts and Neo4j load"]
+    E --> F["Hybrid GraphRAG retriever"]
+    E --> G["Path retriever and cache"]
+    F --> H["Adaptive router"]
+    G --> H
+    H --> I["Grounded answer generator"]
+    I --> J["Streamlit / API / CLI"]
+    E --> K["Evaluation harness"]
+    H --> K
+```
+
+### Layer 1: Corpus Ingestion
+
+The raw PDFs live in `data/raw/`. The ingestion pipeline reads them, detects headings and articles, and turns them into structured chunks with stable metadata.
+
+Each chunk keeps:
+
+- document name
+- article reference when available
+- page span
+- section title
+- stable chunk ID
+- source text hash
+
+This provenance matters because every answer needs traceable evidence.
+
+### Layer 2: Extraction And Graph Build
+
+The extraction phase identifies legal entities and relations, then normalizes them into graph-ready records.
+
+Examples:
+
+- regulations
+- articles
+- obligations
+- actors
+- rights
+- risk classes
+- article topics
+
+These records are persisted into a graph catalog and loaded into Neo4j. The graph is then enriched with community labels so the retrieval layer can reason over connected clusters, not only isolated chunks.
+
+### Layer 3: GraphRAG Retrieval
+
+The base GraphRAG runtime combines:
+
+- lexical overlap
+- vector similarity
+- metadata and article alignment
+- graph/entity signals
+- reciprocal rank fusion
+
+This is the strong general-purpose baseline on the branch.
+
+### Layer 4: PathCacheRAG Retrieval
+
+PathCacheRAG adds a new evidence object: the graph path.
+
+```mermaid
+flowchart TD
+    Q["User question"] --> S["Question analysis"]
+    S --> E["Seed entities and article anchors"]
+    E --> P["Path enumeration"]
+    P --> R["Path scoring and chunk alignment"]
+    R --> C["Persistent path cache"]
+    C --> A["Adaptive mode arbitration"]
+    A --> G["Grounded generation"]
+```
+
+In this layer the system:
+
+- expands candidate legal paths from seed entities
+- scores them using entity match, relation confidence, article alignment, and document alignment
+- converts the best paths into chunk-grounded evidence
+- optionally reuses cached path packs on repeated questions
+
+### Layer 5: Adaptive Arbitration
+
+The branch default is `adaptive`.
+
+It does not blindly pick one retrieval mode. It:
+
+1. inspects question signals
+2. proposes candidate modes such as `hybrid` and `path_cache`
+3. evaluates the returned evidence packs
+4. selects the strongest route
+5. stores that decision in the response trace for inspection
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant R as Router
+    participant H as Hybrid
+    participant P as PathCache
+    participant G as Generator
+
+    U->>R: Ask legal question
+    R->>H: Candidate retrieval
+    R->>P: Candidate retrieval
+    H-->>R: Hybrid evidence pack
+    P-->>R: Path evidence pack
+    R->>R: Compare evidence quality
+    R->>G: Send selected evidence
+    G-->>U: Answer with citations and trace
+```
+
+### Layer 6: Product Surfaces
+
+The system is exposed through:
+
+- `Streamlit` for end-user and operator workflows
+- `FastAPI` for programmable access
+- `CLI` for pipeline and evaluation commands
+- `Docker Compose` for local orchestration
+
+The dashboard is intentionally modular:
+
+- `Home` for posture and benchmark overview
+- `Chat` for grounded query execution
+- `Ops` for jobs, graph health, evaluation, artifacts, and cache status
+- `Corpus Explorer` for source-level inspection
+- `Path Explorer` for path retrieval and adaptive routing inspection
+- `Project Guide` for in-app documentation
+
+## Performance Validation And Quality
+
+### Validated Corpus Snapshot
+
+The current graph build on this branch shows:
+
+| Metric | Value |
+| --- | ---: |
+| Documents loaded | `3` |
+| Chunks loaded | `1319` |
+| Entities loaded | `557` |
+| Relations loaded | `3408` |
+| Communities detected | `147` |
+| Neo4j load used | `true` |
+
+Chunk distribution:
+
+```mermaid
+pie title Chunk Distribution By Regulation
     "AI Act 552" : 552
     "Digital Services Act 401" : 401
     "GDPR 366" : 366
 ```
 
-Top extracted entity groups in the current graph:
+Top entity groups in the current graph:
 
 | Entity type | Count |
 | --- | ---: |
@@ -143,540 +283,129 @@ Top extracted entity groups in the current graph:
 | `right` | `11` |
 | `actor` | `8` |
 
-## The Entire System Explained
+### Benchmark Snapshot
 
-This section explains the whole system from raw document to final answer.
+Latest validated evaluation artifact:
 
-### 1. High-level architecture
+- file: `data/processed/evaluation/eval_2fca346db6561871.json`
+- total cases: `54`
 
-```mermaid
-flowchart LR
-    A["Official EU legal PDFs"] --> B["PDF parsing and article detection"]
-    B --> C["Semantic chunking with provenance"]
-    C --> D["Entity and relation extraction"]
-    D --> E["Canonicalization and graph-ready artifacts"]
-    E --> F["Neo4j graph plus communities"]
-    F --> G["Hybrid retriever"]
-    G --> H["Agent workflow"]
-    H --> I["Grounded answer generation"]
-    I --> J["API CLI and Dashboard"]
-    F --> K["Evaluation and benchmarking"]
-    G --> K
-    H --> K
-```
+| Mode | Avg score | Faithfulness | Context precision | Answer relevancy | Multi-hop accuracy | Avg latency ms | Cache hit rate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `adaptive` | `0.3704` | `0.6778` | `0.3000` | `0.2593` | `0.2444` | `306.18` | `0.2222` |
+| `hybrid` | `0.3658` | `0.6593` | `0.3000` | `0.2593` | `0.2444` | `181.89` | `0.0000` |
+| `path_cache` | `0.3556` | `0.6593` | `0.3111` | `0.2407` | `0.2111` | `174.11` | `1.0000` |
+| `path_hybrid` | `0.3556` | `0.6593` | `0.3111` | `0.2407` | `0.2111` | `1798.69` | `0.0000` |
+| `baseline` | `0.3491` | `0.7148` | `0.2667` | `0.2037` | `0.2111` | `161.16` | `0.0000` |
 
-At a high level, the system has three layers:
+What these numbers mean:
 
-1. **Offline knowledge build**  
-   Raw legal documents are parsed, chunked, enriched, and transformed into graph artifacts.
+- `adaptive` is the best overall retrieval mode on the branch
+- `hybrid` remains a strong fixed-mode baseline
+- `path_cache` gives the clearest repeat-query cache story
+- `path_hybrid` is the most exploratory and the slowest
 
-2. **Online runtime**  
-   User questions trigger hybrid retrieval, optional graph expansion, and grounded answer generation.
+### Validation Commands
 
-3. **Product and operations layer**  
-   The resulting system is exposed through a CLI, API, dashboard, health endpoints, and benchmark tooling.
-
-### 2. The full build pipeline
-
-#### 2.1 Corpus ingestion
-
-The ingestion pipeline reads the raw PDFs from `data/raw/` and converts them into structured records.
-
-What happens here:
-
-- PDF text is extracted page by page
-- headings and article markers are detected
-- sections are segmented
-- text is broken into chunks sized for retrieval and generation
-- each chunk keeps source metadata
-
-Every chunk is designed to retain provenance such as:
-
-- document name
-- article reference
-- section title
-- page range
-- stable chunk ID
-- text hash
-
-This is the foundation for traceable answers later.
-
-#### 2.2 Entity and relation extraction
-
-Once chunked text exists, the extraction phase tries to identify meaningful legal units and their relationships.
-
-Examples of entity types include:
-
-- regulations
-- articles
-- obligations
-- actors
-- rights
-- risk classes
-- topical sections
-
-Examples of relations include:
-
-- article references another article
-- article covers a topic
-- an obligation applies to an actor
-- a topic links to a legal concept
-
-The current implementation supports multiple model backends behind one provider abstraction:
-
-- `local`
-- `openai`
-- `anthropic`
-- `gemini`
-- `heuristic`
-- `auto`
-
-For this machine, the validated local defaults are:
-
-```env
-GRAPH_RAG_MODEL_BACKEND=local
-GRAPH_RAG_LOCAL_CHAT_MODEL=Qwen/Qwen2.5-1.5B-Instruct
-GRAPH_RAG_LOCAL_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-GRAPH_RAG_LOCAL_DEVICE=auto
-```
-
-#### 2.3 Graph construction
-
-After extraction, the system builds a knowledge graph and persists it in Neo4j.
-
-The graph contains at least these conceptual elements:
-
-- documents
-- sections
-- chunks
-- entities
-- relationships
-- community labels
-
-The graph is useful because a legal answer often depends on *connected meaning*, not just textual similarity.
-
-For example:
-
-- one article defines high-risk classification
-- another article describes provider obligations
-- another article explains conformity assessment
-
-A graph makes these linkages first-class instead of accidental.
-
-### 3. The graph data model
-
-```mermaid
-flowchart TD
-    D["Document"] --> S["Section"]
-    S --> C["Chunk"]
-    C --> M["Mention"]
-    M --> E["Entity"]
-    E --> R["Relation to other entities"]
-    E --> G["Community"]
-    C --> A["Article reference"]
-```
-
-In practical terms:
-
-- `Document` represents a source regulation
-- `Section` captures a chapter or article section
-- `Chunk` is the retrieval unit
-- `Entity` is a canonical concept extracted from text
-- `Relation` expresses how entities connect
-- `Community` groups related entities after graph analysis
-
-### 4. Query-time architecture
-
-When a user asks a question, the system does not jump straight to text generation. It runs a retrieval and reasoning pipeline first.
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant UI as API or Dashboard
-    participant A as Agent workflow
-    participant R as Hybrid retriever
-    participant G as Graph artifacts or Neo4j
-    participant M as Model backend
-
-    U->>UI: Ask question
-    UI->>A: Query request
-    A->>R: Retrieve evidence
-    R->>G: Lexical search plus graph signals
-    R->>M: Embedding generation
-    G-->>R: Candidate chunks plus graph paths
-    M-->>R: Query embedding
-    R-->>A: Ranked evidence
-    A->>A: Evidence sufficiency check
-    A->>M: Grounded answer synthesis
-    M-->>A: Answer draft
-    A-->>UI: Answer plus citations plus trace
-    UI-->>U: Final response
-```
-
-### 5. How hybrid retrieval works
-
-The retriever combines multiple signals:
-
-- **Vector similarity**  
-  Semantic closeness between the query and chunk embeddings.
-
-- **Lexical overlap**  
-  Token-level overlap, useful for exact article references and legal phrases.
-
-- **Metadata alignment**  
-  Boosts chunks that match article references or document hints like "AI Act" or "GDPR."
-
-- **Graph score**  
-  Uses entity matches and graph traversal paths to reward chunks that sit near relevant concepts.
-
-The scores are fused with reciprocal rank fusion plus additional weighting.
-
-This matters because legal retrieval benefits from more than one type of search:
-
-- vector search helps with semantic meaning
-- lexical search helps with exact statute language
-- graph traversal helps with cross-reference reasoning
-
-### 6. The agent workflow
-
-The agent layer coordinates the answering process.
-
-Its job is to:
-
-- analyze the incoming question
-- run retrieval
-- check whether the evidence looks sufficient
-- optionally rewrite or expand the search
-- generate a grounded answer from the retrieved evidence
-- package citations, graph paths, and trace metadata
-
-The repository uses a LangGraph-style workflow and is organized so the retrieval path is inspectable, bounded, and testable rather than an opaque chain of prompts.
-
-### 7. What the user actually sees
-
-The application exposes several surfaces:
-
-| Surface | Purpose |
-| --- | --- |
-| CLI | Build, rebuild, query, and evaluate the system from the terminal |
-| FastAPI | Programmatic access, health checks, and machine-to-machine workflows |
-| Streamlit Dashboard | User-facing workspace for chat, ops, corpus exploration, and documentation |
-| Neo4j Browser | Direct graph inspection and debugging |
-
-The Streamlit app currently includes:
-
-- **Home** for system posture, benchmark summary, and app navigation
-- **Chat** for grounded Q and A with compare mode
-- **Corpus Explorer** for browsing chunks by regulation and article
-- **Ops** for graph and evaluation visibility
-- **Project Guide** for in-app documentation
-
-### 8. Why this architecture is useful
-
-This design is especially strong for regulation-heavy domains because it gives you:
-
-- source-aware retrieval
-- article disambiguation
-- inspectable provenance
-- better multi-hop reasoning than plain similarity search
-- a clearer operator story for debugging why an answer happened
-
-## Performance Validation And Quality
-
-This project is evaluated as a real system, not just described conceptually.
-
-### 1. Current benchmark snapshot
-
-The repository includes a stored evaluation run at:
-
-- [`data/processed/evaluation/eval_2fca346db6561871.json`](data/processed/evaluation/eval_2fca346db6561871.json)
-
-That benchmark compares a baseline retrieval path against GraphRAG across `54` cases.
-
-#### Aggregate benchmark table
-
-| Metric | Baseline | GraphRAG | Delta |
-| --- | ---: | ---: | ---: |
-| Average score | `0.3583` | `0.3815` | `+6.48%` |
-| Faithfulness | `0.7148` | `0.6593` | `-7.76%` |
-| Context precision | `0.2667` | `0.3000` | `+12.49%` |
-| Answer relevancy | `0.2407` | `0.2778` | `+15.41%` |
-| Multi-hop accuracy | `0.2111` | `0.2889` | `+36.85%` |
-
-#### Visual comparison
-
-```mermaid
-xychart-beta
-    title "Benchmark Comparison Across 54 Cases"
-    x-axis ["Average", "Faithfulness", "Context", "Relevancy", "MultiHop"]
-    y-axis "Score" 0 --> 1
-    bar "Baseline" [0.3583, 0.7148, 0.2667, 0.2407, 0.2111]
-    bar "GraphRAG" [0.3815, 0.6593, 0.3000, 0.2778, 0.2889]
-```
-
-### 2. What these metrics mean
-
-If you are not used to evaluation jargon, here is the practical meaning:
-
-- **Average score**  
-  A combined summary of overall answer quality.
-
-- **Faithfulness**  
-  Whether the answer stays anchored to retrieved evidence instead of inventing unsupported claims.
-
-- **Context precision**  
-  Whether the retrieved evidence was actually relevant.
-
-- **Answer relevancy**  
-  Whether the answer addressed the question directly.
-
-- **Multi-hop accuracy**  
-  Whether the system handled questions that depend on more than one reasoning step.
-
-The benchmark result tells a clear story:
-
-- GraphRAG is better than the baseline on overall quality
-- GraphRAG is materially better at multi-hop reasoning
-- GraphRAG retrieves more relevant context
-- faithfulness still deserves ongoing monitoring and refinement
-
-That is exactly the kind of tradeoff you want to see surfaced honestly in a serious repository.
-
-### 3. Graph-scale validation
-
-The latest graph build stats are stored in:
-
-- [`data/processed/graph/load_stats.json`](data/processed/graph/load_stats.json)
-
-Current validated graph build:
-
-| Graph build signal | Value |
-| --- | ---: |
-| Documents loaded | `3` |
-| Chunks loaded | `1319` |
-| Entities loaded | `557` |
-| Relations loaded | `3408` |
-| Communities detected | `147` |
-| Used Neo4j | `true` |
-
-### 4. Tests and quality gates
-
-The repository currently passes:
-
-- `17` project tests in the validated environment
-- `compileall` across `dashboard`, `src`, and `tests`
-- health endpoint checks on the API
-- end-to-end query validation using the local backend
-
-Core validation commands:
+Validated in the project environment:
 
 ```powershell
+conda activate RAGenv
 python -m unittest discover -s tests
 python -m compileall dashboard src tests
-graphrag-engine doctor
-graphrag-engine run-eval
+python -m graphrag_engine.cli.main doctor
+python -m graphrag_engine.cli.main run-eval
 ```
 
-### 5. Retrieval quality notes
+### Reproducibility
 
-A key practical validation milestone in this repo is article disambiguation.
+The metrics in this README are not placeholders. They come from generated artifacts in `data/processed/`.
 
-For example, the system was tuned so that questions like:
+See:
 
-```text
-What does Article 6 require for high-risk AI systems?
-```
-
-prefer the correct `AI Act Article 6` evidence instead of drifting into another regulation or unrelated article.
-
-This is a very important quality signal in regulatory QA because many laws share similar language and overlapping topic names.
-
-### 6. Speed and runtime characteristics
-
-This system can run fully local, but speed depends heavily on hardware and backend choice.
-
-Current runtime reality:
-
-- retrieval is usually much cheaper than generation
-- first-run latency is highest because models and caches warm up
-- local generation is slower than hosted frontier APIs
-- the current local path is optimized for **working offline and staying inspectable**, not for lowest possible latency
-
-On this machine, the validated local stack uses:
-
-- `Qwen/Qwen2.5-1.5B-Instruct` for chat and reasoning
-- `sentence-transformers/all-MiniLM-L6-v2` for embeddings
-- GPU-enabled PyTorch in the `RAGenv` environment
-
-This is a strong local development setup, but it is still consumer-hardware inference, not a high-throughput production inference cluster.
+- `docs/reproduce_results.md`
+- `docs/pathcache_rag_spec.md`
 
 ## Detailed Deployment Guide
 
-This project is designed to run in two practical ways:
+### 1. Recommended Environment
 
-1. directly on the host machine
-2. through Docker Compose
-
-Both are useful.
-
-- Use **direct local run** when you want the simplest development loop.
-- Use **Docker Compose** when you want reproducible local orchestration.
-
-### 1. Prerequisites
-
-#### Required
-
-- Python `3.11+`
-- Conda if you want to use the recommended `RAGenv`
-- the three official PDFs in `data/raw/`
-
-#### Recommended
-
-- Docker Desktop for Compose-based startup
-- an NVIDIA GPU for faster local inference
-- Neo4j running either through Docker Compose or a local instance
-
-### 2. Environment setup
-
-Copy the template:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Important environment variables:
-
-```env
-GRAPH_RAG_MODEL_BACKEND=local
-GRAPH_RAG_LOCAL_CHAT_MODEL=Qwen/Qwen2.5-1.5B-Instruct
-GRAPH_RAG_LOCAL_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-GRAPH_RAG_LOCAL_DEVICE=auto
-GRAPH_RAG_NEO4J_URI=bolt://localhost:7687
-GRAPH_RAG_NEO4J_USER=neo4j
-GRAPH_RAG_NEO4J_PASSWORD=change-me-now
-GRAPH_RAG_API_KEY=
-```
-
-Notes:
-
-- `GRAPH_RAG_API_KEY` is optional but recommended if you want `/v1/*` API protection.
-- If you do not have OpenAI, Anthropic, or Gemini keys, the local backend is enough to run the project.
-- The host machine should keep `GRAPH_RAG_NEO4J_URI=bolt://localhost:7687`.
-- Docker automatically overrides that to `bolt://neo4j:7687` for container-to-container traffic.
-
-### 3. Recommended Windows bootstrap
-
-This repository includes a bootstrap script:
-
-```powershell
-.\scripts\bootstrap_windows.ps1
-```
-
-That script:
-
-- creates `RAGenv`
-- installs the package in editable mode with local extras
-- prepares the project for Windows-based development
-
-### 4. Direct local deployment
-
-#### Step 1: activate the environment
+Use the Conda environment already prepared for the project:
 
 ```powershell
 conda activate RAGenv
 python -m pip install -e ".[dev,local]"
 ```
 
-#### Step 2: place source PDFs
+### 2. Required Inputs
 
-Put the official English PDFs in:
+Place these PDFs into `data/raw/`:
 
-```text
-data/raw/
-```
+- `OJ_L_202401689_EN_TXT.pdf`
+- `CELEX_32016R0679_EN_TXT.pdf`
+- `CELEX_32022R2065_EN_TXT.pdf`
 
-Expected documents:
+### 3. Local Model Setup
 
-- AI Act
-- GDPR
-- Digital Services Act
+Validated local stack on this machine:
 
-#### Step 3: build the knowledge base
+- chat model: `Qwen/Qwen2.5-1.5B-Instruct`
+- embedding model: `sentence-transformers/all-MiniLM-L6-v2`
+
+Useful health check:
 
 ```powershell
-graphrag-engine doctor
-graphrag-engine ingest
-graphrag-engine extract
-graphrag-engine build-graph
-graphrag-engine reindex
-graphrag-engine run-eval
+python -m graphrag_engine.cli.main doctor
 ```
 
-#### Step 4: start the API
+### 4. Build The Knowledge Base
+
+```powershell
+python -m graphrag_engine.cli.main ingest
+python -m graphrag_engine.cli.main extract
+python -m graphrag_engine.cli.main build-graph
+python -m graphrag_engine.cli.main reindex
+python -m graphrag_engine.cli.main run-eval
+```
+
+### 5. Run The App Locally
+
+API:
 
 ```powershell
 python -m uvicorn graphrag_engine.api.app:app --host 127.0.0.1 --port 8000
 ```
 
-#### Step 5: start the dashboard
-
-In another terminal:
+Dashboard:
 
 ```powershell
-streamlit run dashboard/Home.py --server.headless true --server.address 127.0.0.1 --server.port 8501
+streamlit run dashboard/Home.py
 ```
 
-#### Step 6: open the application
+Open:
 
 - Dashboard: `http://127.0.0.1:8501`
-- API: `http://127.0.0.1:8000`
 - API docs: `http://127.0.0.1:8000/docs`
-- Neo4j Browser: `http://localhost:7474`
+- Neo4j browser: `http://127.0.0.1:7474`
 
-### 5. Docker Compose deployment
+### 6. Use The CLI
 
-The repository includes:
-
-- [`docker-compose.yml`](docker-compose.yml)
-- [`Dockerfile`](Dockerfile)
-
-The Compose stack starts:
-
-- `neo4j`
-- `api`
-- `dashboard`
-
-To launch:
+Representative commands:
 
 ```powershell
-docker compose up -d --build
+python -m graphrag_engine.cli.main query "What does Article 6 require for high-risk AI systems?" --mode adaptive --top-k 6
+python -m graphrag_engine.cli.main path-cache-stats
+python -m graphrag_engine.cli.main clear-path-cache
+python -m graphrag_engine.cli.main run-eval
 ```
 
-To inspect:
+### 7. Use Docker Compose
 
 ```powershell
-docker compose ps
-docker compose logs -f api
-docker compose logs -f dashboard
-docker compose logs -f neo4j
+docker compose up --build
 ```
 
-To stop:
-
-```powershell
-docker compose down
-```
-
-### 6. Health checks and verification
-
-The API exposes:
-
-- `GET /health/live`
-- `GET /health/ready`
-- `GET /health`
-- `GET /v1/system/status`
-
-Check readiness:
+Health checks:
 
 ```powershell
 curl http://localhost:8000/health/live
@@ -684,166 +413,70 @@ curl http://localhost:8000/health/ready
 curl http://localhost:8000/v1/system/status
 ```
 
-If `GRAPH_RAG_API_KEY` is set, use:
+### 8. Deployment Hygiene
 
-```powershell
-curl -H "X-API-Key: your-key" http://localhost:8000/v1/system/status
-```
+Before any serious shared deployment:
 
-### 7. Deployment hardening checklist
-
-Before sharing or deploying beyond your own machine:
-
-- change the default Neo4j password
-- set `GRAPH_RAG_API_KEY`
-- review `.env` and remove unused provider keys
-- confirm `data/` and Neo4j volumes persist correctly
-- run the benchmark again after major changes
-- confirm the dashboard answers at least one representative legal question correctly
-- confirm citations point to the correct regulation and article
-
-### 8. Troubleshooting
-
-#### Docker is not starting
-
-- ensure Docker Desktop is running
-- run `docker compose ps`
-- inspect container logs
-
-#### Neo4j is unavailable
-
-- verify port `7687` is open
-- confirm the password in `.env` matches the running Neo4j instance
-- if using Docker, ensure the `neo4j` service is healthy before `api` starts
-
-#### Local model is too slow
-
-- expect the first run to be the slowest
-- keep the local backend for development and offline use
-- use a stronger hosted backend later if you need better latency or stronger reasoning
-
-#### Dashboard loads but answers are empty
-
-- run `graphrag-engine doctor`
-- confirm the PDFs exist in `data/raw/`
-- rebuild the artifacts with `ingest`, `extract`, and `build-graph`
-- check that `data/processed/graph/graph_catalog.json` exists
+- change default Neo4j credentials
+- set `GRAPH_RAG_API_KEY` if you want API protection
+- verify mounted volumes for `data/`
+- keep the benchmark artifact and README in sync with the branch you ship
+- validate the selected backend one more time with `doctor`
 
 ## Development Notes
 
-### 1. Repository structure
+### Important Branch Context
 
-```text
-src/graphrag_engine/
-  agent/        Query planning and orchestration
-  api/          FastAPI service
-  cli/          Operator CLI
-  common/       Config, logging, providers, typed models, storage helpers
-  evaluation/   Benchmark fixtures, metrics, and evaluation service
-  extraction/   Entity and relation extraction
-  generation/   Grounded answer synthesis
-  graph/        Neo4j loading and community detection
-  ingestion/    PDF parsing and chunking
-  retrieval/    Hybrid retrieval and score fusion
-dashboard/      Streamlit multi-page application
-configs/        Evaluation fixtures and config
-data/           Raw PDFs, processed artifacts, and caches
-tests/          Unit and integration tests
-```
+`main` is the flagship GraphRAG repo.
 
-### 2. Backend design philosophy
+`PathCacheRAG` is the experimental but serious branch that adds:
 
-The project is built around a provider abstraction so the rest of the system does not need to care whether the active model backend is:
+- path-centric retrieval
+- persistent path caching
+- adaptive retrieval arbitration
+- a dedicated path inspection interface
 
-- local
-- OpenAI
-- Anthropic
-- Gemini
-- heuristic fallback
+### Key Files
 
-That means ingestion, graph building, retrieval, API routes, and dashboard logic do not have to be rewritten every time the model backend changes.
+- `src/graphrag_engine/retrieval/service.py`
+- `src/graphrag_engine/retrieval/path_cache.py`
+- `src/graphrag_engine/agent/workflow.py`
+- `src/graphrag_engine/evaluation/service.py`
+- `dashboard/pages/5_Path_Explorer.py`
+- `docs/pathcache_rag_spec.md`
 
-### 3. Why Neo4j is central in v1
+### Honest Limitations
 
-This project intentionally uses a lean Neo4j-centric design because it provides:
+This branch is strong, but not magical.
 
-- graph persistence
-- graph traversal
-- a strong local operator story
-- a simpler system footprint than introducing many services at once
+- Local generation is slower than hosted frontier APIs.
+- Adaptive routing improves quality, but sometimes increases end-to-end latency because it compares candidate evidence packs.
+- The benchmark is real and useful, but still lightweight compared with a large enterprise legal evaluation stack.
+- External providers are implemented, but not all are live-validated without user-supplied keys.
+- Internet-facing deployment still needs stricter security hardening than local-first usage.
 
-This keeps the architecture serious without making the first release unnecessarily fragmented.
+### What Counts As Complete Here
 
-### 4. Why local Qwen is the default here
+For this branch, "complete" means:
 
-The current validated local configuration uses:
+- real corpus ingested
+- graph built
+- path modes implemented
+- adaptive route selection implemented
+- benchmark saved
+- tests passing
+- dashboard and docs updated
 
-- `Qwen/Qwen2.5-1.5B-Instruct`
-- `sentence-transformers/all-MiniLM-L6-v2`
-
-Why:
-
-- it runs on consumer hardware
-- it allows offline development
-- it avoids blocking the project on paid API access
-- it is sufficient for a serious local-first build
-
-Hosted providers remain useful for stronger final validation, but they are optional.
-
-### 5. Graceful degradation
-
-The repository is designed so work can continue even when some optional pieces are missing:
-
-- if Neo4j is unavailable, local graph artifacts still exist
-- if hosted keys are missing, local or heuristic backends can still run
-- tests can still validate core logic without every optional dependency being live
-
-### 6. Current known limits
-
-This is a serious system, but it still has honest limits:
-
-- local generation is slower than hosted frontier APIs
-- benchmark numbers are good, but still worth improving
-- graph scale is strong for a real local build, but not the final ceiling
-- deployment hardening is partly configurable and still needs conscious operator setup
-
-### 7. Additional internal project documentation
-
-For deeper project notes beyond this README, see:
-
-- [`docs/project_overview.md`](docs/project_overview.md)
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/user_guide.md`](docs/user_guide.md)
-- [`docs/operations_runbook.md`](docs/operations_runbook.md)
-- [`docs/release_checklist.md`](docs/release_checklist.md)
-- [`docs/reproduce_results.md`](docs/reproduce_results.md)
+That bar is met for a strong v1 branch release.
 
 ## References
 
-### Official legal sources
-
-- EU AI Act: <https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng>
-- GDPR: <https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng>
-- Digital Services Act: <https://eur-lex.europa.eu/eli/reg/2022/2065/oj/eng>
-
-### Technology references
-
-- Neo4j Documentation: <https://neo4j.com/docs/>
-- FastAPI Documentation: <https://fastapi.tiangolo.com/>
-- Streamlit Documentation: <https://docs.streamlit.io/>
-- LangGraph Documentation: <https://docs.langchain.com/oss/python/langgraph/overview>
-- Sentence Transformers Documentation: <https://sbert.net/>
-- Qwen2.5 1.5B Instruct model card: <https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct>
-
-### Project evidence in this repository
-
-- Graph load stats: [`data/processed/graph/load_stats.json`](data/processed/graph/load_stats.json)
-- Latest benchmark output: [`data/processed/evaluation/eval_2fca346db6561871.json`](data/processed/evaluation/eval_2fca346db6561871.json)
-- Release checklist: [`docs/release_checklist.md`](docs/release_checklist.md)
-- Reproducibility guide: [`docs/reproduce_results.md`](docs/reproduce_results.md)
-
----
-
-If you are reading this as a builder: this repository is meant to be understandable, inspectable, and extensible.
-
-If you are reading it as a reviewer: the most important thing to inspect is not just whether the answer looks good, but whether the answer is traceable back to the correct evidence.
+- EU AI Act official text: https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng
+- GDPR official text: https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng
+- Digital Services Act official text: https://eur-lex.europa.eu/eli/reg/2022/2065/oj/eng
+- GraphRAG: https://arxiv.org/abs/2404.16130
+- PathRAG: https://arxiv.org/abs/2502.14902
+- CAG: https://arxiv.org/abs/2412.15605
+- ColBERTv2: https://aclanthology.org/2022.naacl-main.272/
+- RAPTOR: https://arxiv.org/abs/2401.18059
+- HippoRAG: https://arxiv.org/abs/2405.14831

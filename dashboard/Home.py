@@ -9,7 +9,7 @@ from ui import configure_page, render_badges, render_card, render_doc_panel, ren
 
 configure_page(
     "Flagship EU GraphRAG Workspace",
-    "A modular regulatory intelligence workspace for the EU AI Act, GDPR, and Digital Services Act with graph retrieval, provenance, evaluation, and operator tooling.",
+    "A modular regulatory intelligence workspace for the EU AI Act, GDPR, and Digital Services Act with GraphRAG, PathCacheRAG, provenance, evaluation, and operator tooling.",
 )
 
 overview = corpus_overview()
@@ -75,15 +75,15 @@ with tab_overview:
         section_title("Workspace Summary")
         render_card(
             "What this project does",
-            "It ingests the EU AI Act, GDPR, and DSA, extracts entities and relations, builds a Neo4j knowledge graph, and answers questions with graph-grounded citations.",
+            "It ingests the EU AI Act, GDPR, and DSA, extracts entities and relations, builds a Neo4j knowledge graph, and answers questions through both GraphRAG and PathCacheRAG retrieval with grounded citations.",
         )
         render_card(
-            "Why GraphRAG matters here",
-            "Legal questions often depend on linked concepts, article references, and multi-hop reasoning. Hybrid retrieval plus graph traversal performs better than plain similarity search alone.",
+            "Why PathCacheRAG matters here",
+            "Legal questions often depend on linked concepts, article references, and multi-hop reasoning. This workspace now supports adaptive arbitration between hybrid GraphRAG and path-aware cached retrieval.",
         )
         render_card(
             "What this app gives you",
-            "A guided home page, analyst chat, corpus explorer, path explorer, operational diagnostics, benchmark evidence, and an in-app project manual for learning and demonstration.",
+            "A guided home page, analyst chat, corpus explorer, path explorer, operational diagnostics, benchmark evidence, reproducibility guidance, and an in-app project manual for learning and demonstration.",
         )
 
     lower_left, lower_right = st.columns((0.95, 1.05), gap="large")
@@ -170,7 +170,7 @@ with tab_navigate:
     with nav_left:
         render_card(
             "Chat",
-            "Use the analyst chat page to ask grounded questions, compare hybrid GraphRAG with baseline retrieval, inspect citations, and read the agent trace.",
+            "Use the analyst chat page to ask grounded questions, compare adaptive PathCacheRAG with baseline retrieval, inspect citations, and read the agent trace.",
         )
         render_card(
             "Corpus Explorer",
