@@ -1,5 +1,7 @@
 {
     "python.defaultInterpreterPath": "C:\\Users\\Mehul-PC\\anaconda3\\envs\\RAGenv\\python.exe",
     "python.condaPath": "C:\\Users\\Mehul-PC\\anaconda3\\Scripts\\conda.exe",
-    "python.terminal.activateEnvironment": true
+    "python.terminal.activateEnvironment": true,
+    "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "python-envs.defaultPackageManager": "ms-python.python:pip"
 }
