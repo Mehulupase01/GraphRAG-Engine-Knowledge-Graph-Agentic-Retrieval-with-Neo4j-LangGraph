@@ -243,7 +243,7 @@ The dashboard is intentionally modular:
 
 - `Home` for posture and benchmark overview
 - `Chat` for grounded query execution
-- `Ops` for jobs, graph health, evaluation, artifacts, and cache status
+- `Ops` for jobs, graph health, evaluation, artifacts, cache status, and adaptive routing analytics
 - `Corpus Explorer` for source-level inspection
 - `Path Explorer` for path retrieval and adaptive routing inspection
 - `Project Guide` for in-app documentation
@@ -292,11 +292,11 @@ Latest validated evaluation artifact:
 
 | Mode | Avg score | Faithfulness | Context precision | Answer relevancy | Multi-hop accuracy | Avg latency ms | Cache hit rate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `adaptive` | `0.3704` | `0.6778` | `0.3000` | `0.2593` | `0.2444` | `306.18` | `0.2222` |
-| `hybrid` | `0.3658` | `0.6593` | `0.3000` | `0.2593` | `0.2444` | `181.89` | `0.0000` |
-| `path_cache` | `0.3556` | `0.6593` | `0.3111` | `0.2407` | `0.2111` | `174.11` | `1.0000` |
-| `path_hybrid` | `0.3556` | `0.6593` | `0.3111` | `0.2407` | `0.2111` | `1798.69` | `0.0000` |
-| `baseline` | `0.3491` | `0.7148` | `0.2667` | `0.2037` | `0.2111` | `161.16` | `0.0000` |
+| `adaptive` | `0.3704` | `0.6778` | `0.3000` | `0.2593` | `0.2444` | `325.85` | `0.2222` |
+| `hybrid` | `0.3658` | `0.6593` | `0.3000` | `0.2593` | `0.2444` | `181.49` | `0.0000` |
+| `path_cache` | `0.3556` | `0.6593` | `0.3111` | `0.2407` | `0.2111` | `170.58` | `1.0000` |
+| `path_hybrid` | `0.3556` | `0.6593` | `0.3111` | `0.2407` | `0.2111` | `1969.03` | `0.0000` |
+| `baseline` | `0.3491` | `0.7148` | `0.2667` | `0.2037` | `0.2111` | `167.08` | `0.0000` |
 
 #### Visual Comparison
 
@@ -318,7 +318,7 @@ xychart-beta
     title "Average End-To-End Latency By Retrieval Mode (ms)"
     x-axis ["Baseline", "Hybrid", "PathCache", "Adaptive", "PathHybrid"]
     y-axis "Latency ms" 0 --> 2000
-    bar "Latency" [161.16, 181.89, 174.11, 306.18, 1798.69]
+    bar "Latency" [167.08, 181.49, 170.58, 325.85, 1969.03]
 ```
 
 What these numbers mean:
@@ -327,6 +327,21 @@ What these numbers mean:
 - `hybrid` remains a strong fixed-mode baseline
 - `path_cache` gives the clearest repeat-query cache story
 - `path_hybrid` is the most exploratory and the slowest
+
+### Adaptive Routing Analytics
+
+The branch now persists adaptive route decisions under `data/processed/analytics/adaptive_routes.jsonl`.
+
+Latest recorded snapshot after the benchmark rerun:
+
+| Signal | Value |
+| --- | ---: |
+| Recorded route events | `88` |
+| Hybrid selections | `64` |
+| Path cache selections | `24` |
+| Cache hit rate | `0.2727` |
+| Preselect match rate | `0.6477` |
+| Average route latency ms | `167.15` |
 
 ### Validation Commands
 
@@ -337,6 +352,7 @@ conda activate RAGenv
 python -m unittest discover -s tests
 python -m compileall dashboard src tests
 python -m graphrag_engine.cli.main doctor
+python -m graphrag_engine.cli.main route-analytics
 python -m graphrag_engine.cli.main run-eval
 ```
 

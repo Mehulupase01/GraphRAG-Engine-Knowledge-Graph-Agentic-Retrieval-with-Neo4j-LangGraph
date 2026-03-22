@@ -116,6 +116,9 @@ The current branch now includes:
 - `adaptive` retrieval mode that compares candidate evidence packs before selecting a final route
 - persistent cache entries under `data/processed/path_cache/`
 - cache schema versioning and invalidation-safe cache keys
+- persisted adaptive routing analytics under `data/processed/analytics/adaptive_routes.jsonl`
+- richer path textualization with supporting document, article, page, and snippet context
+- smarter path pruning that limits redundant broad-entity routes per terminal chunk
 - retrieval trace metadata for:
   - path count
   - cache hit status
@@ -158,17 +161,27 @@ Useful branch-specific commands:
 - `graphrag-engine doctor`
 - `graphrag-engine path-cache-stats`
 - `graphrag-engine clear-path-cache`
+- `graphrag-engine route-analytics`
 - `graphrag-engine query "..." --mode adaptive`
 - `graphrag-engine query "..." --mode path_hybrid`
 - `graphrag-engine query "..." --mode path_cache`
 - `graphrag-engine run-eval`
 
-## Remaining Improvement Opportunities
+## Current Analytics Snapshot
 
-The branch is already meaningful, but the next research-quality improvements would be:
+Latest adaptive routing telemetry after the benchmark rerun:
 
-- smarter path pruning for broad entities like `AI System`
-- better path textualization for low-resource local models
-- adaptive routing that learns from past benchmark deltas instead of using only rule-based arbitration
-- stronger legal-path scoring for cross-regulation questions
-- optional persistence of adaptive routing analytics for offline policy tuning
+- `events = 88`
+- `selected_mode hybrid = 64`
+- `selected_mode path_cache = 24`
+- `cache_hit_rate = 0.2727`
+- `preselected_match_rate = 0.6477`
+- `avg_latency_ms = 167.15`
+
+## Future Research Directions
+
+The branch is feature-complete for a strong local-first release. The next research-quality improvements would be:
+
+- adaptive routing that learns from past benchmark deltas instead of using only score-based arbitration
+- deeper legal-path scoring for cross-regulation questions and actor-specific obligations
+- optional learned reranking on top of cached path evidence packs

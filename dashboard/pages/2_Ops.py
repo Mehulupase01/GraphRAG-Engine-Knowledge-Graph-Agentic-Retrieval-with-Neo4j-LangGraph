@@ -12,6 +12,8 @@ if str(DASHBOARD_ROOT) not in sys.path:
     sys.path.insert(0, str(DASHBOARD_ROOT))
 
 from data_access import (
+    adaptive_route_frame,
+    adaptive_route_summary,
     artifact_frame,
     corpus_overview,
     latest_evaluation_delta,
@@ -38,6 +40,8 @@ evaluation_summary, evaluation_cases, evaluation_aggregate = latest_evaluation_f
 evaluation_delta = latest_evaluation_delta()
 cache_stats = path_cache_stats()
 cache_frame = path_cache_frame()
+route_summary = adaptive_route_summary()
+route_frame = adaptive_route_frame()
 
 if posture["warnings"]:
     render_warning_banner(posture["warnings"])
@@ -51,14 +55,14 @@ metric_columns[2].metric("Neo4j", "Connected" if graph_stats.get("used_neo4j") e
 metric_columns[3].metric("Raw PDFs", posture["raw_pdf_count"])
 metric_columns[4].metric("Path cache entries", cache_stats["entries"])
 metric_columns[5].metric(
-    "Best eval delta",
-    f"{evaluation_delta['best_delta']:+.3f}" if evaluation_delta["best_delta"] is not None else "n/a",
+    "Adaptive route events",
+    route_summary["events"],
 )
 
 tabs = st.tabs(
-    ["Pipeline", "Knowledge Graph", "Benchmark", "Path Cache", "Artifacts", "Runtime Posture"]
+    ["Pipeline", "Knowledge Graph", "Benchmark", "Path Cache", "Adaptive Routing", "Artifacts", "Runtime Posture"]
 )
-tab_pipeline, tab_graph, tab_eval, tab_cache, tab_artifacts, tab_posture = tabs
+tab_pipeline, tab_graph, tab_eval, tab_cache, tab_routes, tab_artifacts, tab_posture = tabs
 
 with tab_pipeline:
     section_title("Recent ingestion and processing jobs")
@@ -256,6 +260,46 @@ with tab_cache:
         st.dataframe(cache_frame.head(40), use_container_width=True, hide_index=True)
     else:
         st.info("No persisted cache artifacts were found.")
+
+with tab_routes:
+    routes_left, routes_right = st.columns((0.95, 1.05), gap="large")
+    with routes_left:
+        section_title("Adaptive routing posture")
+        render_card(
+            "Why this matters",
+            "Adaptive routing is where PathCacheRAG decides whether a query should use chunk-first retrieval or path-first cached evidence. Persisting those decisions makes the branch measurable instead of purely heuristic.",
+        )
+        st.metric("Recorded events", route_summary["events"])
+        st.metric("Cache hit rate", f"{route_summary['cache_hit_rate']:.2%}")
+        st.metric("Avg latency", f"{route_summary['avg_latency_ms']:.1f} ms")
+        st.metric("Preselect match rate", f"{route_summary['preselected_match_rate']:.2%}")
+    with routes_right:
+        section_title("Selected mode distribution")
+        selected_modes = route_summary.get("selected_modes", {})
+        if selected_modes:
+            mode_rows = [
+                {"selected_mode": mode, "events": count}
+                for mode, count in sorted(selected_modes.items(), key=lambda item: item[1], reverse=True)
+            ]
+            chart = (
+                alt.Chart(alt.Data(values=mode_rows))
+                .mark_bar(cornerRadiusTopLeft=8, cornerRadiusTopRight=8, color="#8a5cf6")
+                .encode(
+                    x=alt.X("selected_mode:N", title="Selected mode"),
+                    y=alt.Y("events:Q", title="Events"),
+                    tooltip=["selected_mode", "events"],
+                )
+                .properties(height=280)
+            )
+            st.altair_chart(chart, use_container_width=True)
+        else:
+            st.info("Adaptive routing analytics will appear after adaptive queries are executed.")
+
+    section_title("Recent adaptive routing events")
+    if not route_frame.empty:
+        st.dataframe(route_frame.head(40), use_container_width=True, hide_index=True)
+    else:
+        st.info("No adaptive routing events have been recorded yet.")
 
 with tab_artifacts:
     section_title("Processed artifacts")

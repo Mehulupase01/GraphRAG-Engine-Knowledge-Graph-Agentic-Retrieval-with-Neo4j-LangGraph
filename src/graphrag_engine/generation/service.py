@@ -68,12 +68,18 @@ class AnswerGenerator:
                 traversed_entities = item.get("traversed_entities", [])
                 relation_chain = item.get("relation_chain", [])
                 supporting_chunk_ids = item.get("supporting_chunk_ids", [])
+                supporting_context = item.get("supporting_context", [])
                 chain = " -> ".join(str(entity) for entity in traversed_entities if entity)
                 relations = " | ".join(str(relation) for relation in relation_chain if relation)
                 support = ", ".join(str(chunk_id) for chunk_id in supporting_chunk_ids[:3])
+                support_context = "; ".join(
+                    f"{' '.join(part for part in [str(context.get('document_name', 'Unknown')), str(context.get('article_ref') or '').strip()] if part).strip()}: {str(context.get('snippet', ''))}"
+                    for context in supporting_context[:2]
+                    if isinstance(context, dict)
+                )
                 score = float(item.get("score", 0.0))
                 if chain:
                     path_rows.append(
-                        f"Path evidence: {chain}. Relations: {relations or 'none'}. Supporting chunks: {support or 'none'}. Path score: {score:.4f}."
+                        f"Path evidence: {chain}. Relations: {relations or 'none'}. Supporting chunks: {support or 'none'}. Supporting context: {support_context or 'none'}. Path score: {score:.4f}."
                     )
         return path_rows

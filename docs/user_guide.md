@@ -48,6 +48,7 @@ graphrag-engine extract
 graphrag-engine build-graph
 graphrag-engine query "What does Article 6 require for high-risk AI systems?" --mode adaptive
 graphrag-engine path-cache-stats
+graphrag-engine route-analytics
 graphrag-engine run-eval
 ```
 
@@ -98,4 +99,5 @@ The answer text matters, but the evidence trail matters more.
 - Weak answer: compare `adaptive` with `baseline`
 - Slow response: `path_hybrid` and local generation are the most expensive paths
 - Cache confusion: run `graphrag-engine path-cache-stats`
+- Route arbitration questions: run `graphrag-engine route-analytics`
 - Cache reset needed: run `graphrag-engine clear-path-cache`

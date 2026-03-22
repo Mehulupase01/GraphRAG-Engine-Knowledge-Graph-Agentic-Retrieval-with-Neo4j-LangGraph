@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
 
+from graphrag_engine.common.artifacts import read_jsonl
 from graphrag_engine.common.models import QueryRequest
 from graphrag_engine.retrieval.path_cache import PathCacheStore
 from graphrag_engine.runtime import GraphRAGRuntime
@@ -28,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("doctor", help="Show runtime configuration and backend status")
     subparsers.add_parser("path-cache-stats", help="Show persisted path cache statistics")
     subparsers.add_parser("clear-path-cache", help="Remove all persisted path cache entries")
+    subparsers.add_parser("route-analytics", help="Show adaptive routing analytics")
     subparsers.add_parser("run-eval", help="Run benchmark evaluation")
     return parser
 
@@ -88,6 +91,37 @@ def main() -> None:
     if args.command == "clear-path-cache":
         result = PathCacheStore(runtime.settings).clear()
         print(json.dumps(result, indent=2))
+        return
+
+    if args.command == "route-analytics":
+        path = runtime.settings.processed_data_path / "analytics" / "adaptive_routes.jsonl"
+        events = read_jsonl(path)
+        selected_modes = Counter(str(event.get("selected_mode", "unknown")) for event in events)
+        preselected_matches = sum(
+            1
+            for event in events
+            if str(event.get("selected_mode", "")) == str(event.get("preselected_mode", ""))
+        )
+        payload = {
+            "path": str(path),
+            "events": len(events),
+            "selected_modes": dict(selected_modes),
+            "cache_hit_rate": round(
+                sum(1 for event in events if bool(event.get("cache_hit"))) / max(len(events), 1),
+                4,
+            )
+            if events
+            else 0.0,
+            "avg_latency_ms": round(
+                sum(float(event.get("total_latency_ms", 0.0)) for event in events) / max(len(events), 1),
+                2,
+            )
+            if events
+            else 0.0,
+            "preselected_match_rate": round(preselected_matches / max(len(events), 1), 4) if events else 0.0,
+            "recent_events": events[-5:],
+        }
+        print(json.dumps(payload, indent=2))
         return
 
     if args.command == "run-eval":

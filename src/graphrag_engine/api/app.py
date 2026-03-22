@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from graphrag_engine.common.artifacts import read_json
+from graphrag_engine.common.artifacts import read_json, read_jsonl
 from graphrag_engine.common.compat import BaseModel, Field
 from graphrag_engine.common.models import IngestionJobRecord, QueryRequest
 from graphrag_engine.retrieval.path_cache import PathCacheStore
@@ -43,6 +43,29 @@ def _artifact_counts(runtime: GraphRAGRuntime) -> dict[str, int]:
 
 def _path_cache_counts(runtime: GraphRAGRuntime) -> dict[str, int]:
     return PathCacheStore(runtime.settings).stats()
+
+
+def _adaptive_route_stats(runtime: GraphRAGRuntime) -> dict[str, Any]:
+    path = runtime.settings.processed_data_path / "analytics" / "adaptive_routes.jsonl"
+    events = read_jsonl(path)
+    if not events:
+        return {"events": 0, "selected_modes": {}, "cache_hit_rate": 0.0, "avg_latency_ms": 0.0}
+    selected_modes: dict[str, int] = {}
+    cache_hits = 0
+    total_latency = 0.0
+    for event in events:
+        mode = str(event.get("selected_mode", "unknown"))
+        selected_modes[mode] = selected_modes.get(mode, 0) + 1
+        if bool(event.get("cache_hit")):
+            cache_hits += 1
+        total_latency += float(event.get("total_latency_ms", 0.0))
+    return {
+        "events": len(events),
+        "selected_modes": selected_modes,
+        "cache_hit_rate": round(cache_hits / max(len(events), 1), 4),
+        "avg_latency_ms": round(total_latency / max(len(events), 1), 2),
+        "path": str(path),
+    }
 
 
 def _neo4j_status(runtime: GraphRAGRuntime) -> dict[str, Any]:
@@ -108,6 +131,7 @@ def create_app(runtime: GraphRAGRuntime | None = None):
             "model_backend": runtime.settings.model_backend,
             "artifacts": artifacts,
             "path_cache": _path_cache_counts(runtime),
+            "adaptive_routes": _adaptive_route_stats(runtime),
             "neo4j": neo4j,
             "warnings": _runtime_warnings(runtime),
         }
@@ -154,6 +178,7 @@ def create_app(runtime: GraphRAGRuntime | None = None):
             "raw_files": sorted(path.name for path in runtime.settings.raw_data_path.glob("*") if path.is_file()),
             "artifact_counts": _artifact_counts(runtime),
             "path_cache": _path_cache_counts(runtime),
+            "adaptive_routes": _adaptive_route_stats(runtime),
             "neo4j": _neo4j_status(runtime),
             "latest_evaluation": latest_evaluation,
             "warnings": _runtime_warnings(runtime),

@@ -29,6 +29,14 @@ def write_jsonl(path: Path, rows: Iterable[Any]) -> Path:
     return path
 
 
+def append_jsonl(path: Path, row: Any) -> Path:
+    ensure_dir(path.parent)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False))
+        handle.write("\n")
+    return path
+
+
 def read_jsonl(path: Path) -> list[Any]:
     if not path.exists():
         return []
@@ -39,4 +47,3 @@ def read_jsonl(path: Path) -> list[Any]:
             if line:
                 rows.append(json.loads(line))
     return rows
-

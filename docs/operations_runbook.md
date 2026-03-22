@@ -39,6 +39,7 @@ graphrag-engine run-eval
 graphrag-engine doctor
 graphrag-engine query "What does Article 6 require for high-risk AI systems?" --mode adaptive
 graphrag-engine path-cache-stats
+graphrag-engine route-analytics
 graphrag-engine clear-path-cache
 ```
 
@@ -46,6 +47,7 @@ Use these when you need to:
 
 - confirm local model readiness
 - inspect cache size and schema version
+- inspect persisted adaptive route behavior over time
 - reset persisted path artifacts
 - reproduce adaptive route behavior
 

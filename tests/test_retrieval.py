@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from graphrag_engine.agent.workflow import GraphRAGAgent
-from graphrag_engine.common.artifacts import write_json, write_jsonl
+from graphrag_engine.common.artifacts import read_jsonl, write_json, write_jsonl
 from graphrag_engine.common.models import ChunkRecord, DocumentRecord, EntityRecord, QueryRequest, RelationRecord
 from graphrag_engine.common.providers import HeuristicLLMProvider
 from graphrag_engine.common.settings import Settings
@@ -206,6 +206,9 @@ class RetrievalTests(unittest.TestCase):
             self.assertEqual(retriever.last_retrieval_meta["mode"], "path_hybrid")
             self.assertGreater(int(retriever.last_retrieval_meta["path_count"]), 0)
             self.assertIn("total_latency_ms", retriever.last_retrieval_meta)
+            top_paths = retriever.last_retrieval_meta["top_paths"]
+            self.assertEqual(len({item["path_id"] for item in top_paths}), len(top_paths))
+            self.assertTrue(any(item.get("supporting_context") for item in top_paths))
 
             cached_hits = retriever.retrieve("What does Article 6 require for high-risk AI systems?", top_k=2, mode="path_cache")
             self.assertEqual(cached_hits[0].chunk.chunk_id, "chunk-ai-6")
@@ -527,6 +530,11 @@ class RetrievalTests(unittest.TestCase):
             simple_route = retriever.resolve_mode("What is GDPR?", requested_mode="adaptive")
             self.assertEqual(simple_route["resolved_mode"], "hybrid")
             self.assertEqual(simple_route["candidate_modes"], ["hybrid"])
+
+            analytics_rows = read_jsonl(settings.processed_data_path / "analytics" / "adaptive_routes.jsonl")
+            self.assertGreaterEqual(len(analytics_rows), 2)
+            self.assertEqual(analytics_rows[-1]["selected_mode"], warmed_route_events[0]["resolved_mode"])
+            self.assertIn("candidate_scores", analytics_rows[-1])
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

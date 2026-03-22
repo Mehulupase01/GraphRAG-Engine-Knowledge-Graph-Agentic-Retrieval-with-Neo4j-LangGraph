@@ -5,8 +5,9 @@ import re
 import time
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
-from graphrag_engine.common.artifacts import read_json
+from graphrag_engine.common.artifacts import append_jsonl, read_json
 from graphrag_engine.common.hashing import stable_hash
 from graphrag_engine.common.models import CacheEntry, ChunkRecord, GraphPath, PathRecord, RetrievalHit
 from graphrag_engine.common.providers import LLMProvider, tokenize
@@ -98,6 +99,26 @@ MULTI_HOP_HINTS = (
     "across",
     "interaction",
 )
+GENERIC_ENTITY_TERMS = {
+    "ai",
+    "ai act",
+    "ai system",
+    "ai systems",
+    "article",
+    "controller",
+    "data",
+    "gdpr",
+    "law",
+    "obligation",
+    "platform",
+    "processing",
+    "provider",
+    "regulation",
+    "requirement",
+    "risk",
+    "service",
+    "system",
+}
 
 
 @dataclass(slots=True)
@@ -155,6 +176,7 @@ class HybridRetriever:
             for chunk_id, chunk in self.chunk_by_id.items()
         }
         self.path_cache = PathCacheStore(settings)
+        self.route_analytics_path = self.settings.processed_data_path / "analytics" / "adaptive_routes.jsonl"
 
     def retrieve(self, question: str, *, top_k: int | None = None, mode: str = "hybrid") -> list[RetrievalHit]:
         retrieval_started = time.perf_counter()
@@ -276,6 +298,13 @@ class HybridRetriever:
             "adaptive_preselected_mode": heuristic_mode,
             "adaptive_candidate_scores": candidate_summaries,
         }
+        self._record_adaptive_route(
+            question,
+            signals,
+            routing={**routing, "resolved_mode": best_mode, "preselected_mode": heuristic_mode},
+            retrieval_meta=self.last_retrieval_meta,
+            candidate_summaries=candidate_summaries,
+        )
         return best_hits, {
             **routing,
             "strategy": "adaptive_compare",
@@ -394,12 +423,18 @@ class HybridRetriever:
             arbitration_score += 0.35
         if retrieval_meta.get("cache_hit"):
             arbitration_score += 0.08
+        if mode == "path_cache" and retrieval_meta.get("cache_hit") and signals.article_refs:
+            arbitration_score += 0.16
+        if mode == "path_cache" and signals.article_refs and graph_density > 0:
+            arbitration_score += 0.05
 
         selection_priority = 0.0
         if evidence_sufficient:
             selection_priority += 1.0
         if mode == "path_cache":
             selection_priority += article_alignment + graph_density
+            if retrieval_meta.get("cache_hit") and signals.article_refs:
+                selection_priority += 0.4
         if mode == "hybrid":
             selection_priority += avg_fused * 0.1
 
@@ -636,7 +671,7 @@ class HybridRetriever:
             "cache_schema_version": self.path_cache.CACHE_SCHEMA_VERSION,
             "cache_lookup_ms": cache_lookup_ms,
             "path_enumeration_ms": path_enumeration_ms,
-            "top_paths": [record.model_dump() for record in cache_entry.paths[:12]],
+            "top_paths": [self._serialize_path_record(record) for record in cache_entry.paths[:12]],
         }
         return hits
 
@@ -667,8 +702,8 @@ class HybridRetriever:
                     relation_chain=["seed_mention"],
                     supporting_chunk_ids=[chunk_id],
                     terminal_chunk_id=chunk_id,
-                    score=0.55 + seed_score * 0.4,
-                    metadata={"depth": 0},
+                    score=0.55 + seed_score * 0.4 + self._entity_specificity(seed_entity) * 0.08,
+                    metadata={"depth": 0, "specificity": round(self._entity_specificity(seed_entity), 4)},
                 )
                 if record.path_id not in path_ids_seen:
                     path_ids_seen.add(record.path_id)
@@ -695,6 +730,8 @@ class HybridRetriever:
                     next_entity = self.entity_by_id.get(next_entity_id)
                     if not next_entity:
                         continue
+                    if next_entity_id in traversed_ids:
+                        continue
                     source_chunk_id = relation.get("source_chunk_id", "")
                     supporting_chunk_ids = self._supporting_chunks_for_path(
                         signals,
@@ -705,10 +742,14 @@ class HybridRetriever:
                         continue
                     next_name = str(next_entity.get("canonical_name", next_entity_id))
                     next_match = self._entity_overlap_score(next_entity, signals)
+                    specificity = self._entity_specificity(next_entity)
+                    loop_penalty = max(len(traversed_ids) - len(set(traversed_ids)), 0) * 0.08
                     path_score = (
                         max(carry_score, 0.35) * 0.45
                         + float(relation.get("confidence", 0.4)) * 0.35
                         + next_match * 0.35
+                        + specificity * 0.12
+                        - loop_penalty
                     ) / (depth + 1)
                     path_id = stable_hash(
                         f"{seed_entity_id}:{'|'.join(traversed_ids + [next_entity_id])}:{relation_label}:{source_chunk_id}",
@@ -724,7 +765,7 @@ class HybridRetriever:
                         supporting_chunk_ids=supporting_chunk_ids,
                         terminal_chunk_id=source_chunk_id,
                         score=path_score,
-                        metadata={"depth": depth + 1},
+                        metadata={"depth": depth + 1, "specificity": round(specificity, 4)},
                     )
                     if record.path_id not in path_ids_seen:
                         path_ids_seen.add(record.path_id)
@@ -742,7 +783,7 @@ class HybridRetriever:
                                 max(next_match, carry_score * 0.85),
                             )
                         )
-        return sorted(path_records, key=lambda item: item.score, reverse=True)[:64]
+        return self._prune_path_records(path_records)
 
     def _aggregate_path_scores(
         self,
@@ -775,8 +816,94 @@ class HybridRetriever:
         for chunk_id, scores in raw_scores_by_chunk.items():
             top_scores = sorted(scores, reverse=True)[:4]
             content_alignment = self._chunk_content_alignment(chunk_id, signals)
-            score_by_chunk[chunk_id] = (sum(top_scores) / max(len(top_scores), 1)) * (1.0 + content_alignment * 0.35)
+            cross_reg_bonus = 0.0
+            if self._is_cross_regulation_question(signals):
+                chunk_document = self.document_label_by_id.get(self.chunk_by_id[chunk_id].document_id, "")
+                if chunk_document in signals.document_hints:
+                    cross_reg_bonus = 0.08
+            score_by_chunk[chunk_id] = (sum(top_scores) / max(len(top_scores), 1)) * (
+                1.0 + content_alignment * 0.35 + cross_reg_bonus
+            )
         return score_by_chunk, dict(graph_paths)
+
+    def _serialize_path_record(self, record: PathRecord) -> dict[str, object]:
+        payload = record.model_dump()
+        supporting_context: list[dict[str, object]] = []
+        for chunk_id in record.supporting_chunk_ids[:3]:
+            chunk = self.chunk_by_id.get(chunk_id)
+            if not chunk:
+                continue
+            supporting_context.append(
+                {
+                    "chunk_id": chunk_id,
+                    "document_name": self.document_label_by_id.get(
+                        chunk.document_id,
+                        self.document_name_by_id.get(chunk.document_id, chunk.document_id),
+                    ),
+                    "article_ref": chunk.article_ref,
+                    "page_start": chunk.page_start,
+                    "page_end": chunk.page_end,
+                    "snippet": " ".join(chunk.text.split())[:220],
+                }
+            )
+        payload["supporting_context"] = supporting_context
+        return payload
+
+    def _prune_path_records(self, path_records: list[PathRecord]) -> list[PathRecord]:
+        ranked = sorted(path_records, key=lambda item: item.score, reverse=True)
+        selected: list[PathRecord] = []
+        signature_seen: set[tuple[object, ...]] = set()
+        chunk_quota: dict[str, int] = defaultdict(int)
+        seed_terminal_quota: dict[tuple[str, str], int] = defaultdict(int)
+
+        for record in ranked:
+            signature = (
+                record.terminal_chunk_id,
+                tuple(record.traversed_entity_ids),
+                tuple(record.relation_chain),
+                tuple(record.supporting_chunk_ids[:2]),
+            )
+            if signature in signature_seen:
+                continue
+            if chunk_quota[record.terminal_chunk_id] >= 4:
+                continue
+            if seed_terminal_quota[(record.seed_entity_id, record.terminal_chunk_id)] >= 2:
+                continue
+            signature_seen.add(signature)
+            chunk_quota[record.terminal_chunk_id] += 1
+            seed_terminal_quota[(record.seed_entity_id, record.terminal_chunk_id)] += 1
+            selected.append(record)
+            if len(selected) >= 64:
+                break
+        return selected
+
+    def _record_adaptive_route(
+        self,
+        question: str,
+        signals: QuerySignals,
+        *,
+        routing: dict[str, object],
+        retrieval_meta: dict[str, object],
+        candidate_summaries: list[dict[str, object]],
+    ) -> None:
+        append_jsonl(
+            self.route_analytics_path,
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "question_signature": stable_hash(question.strip().lower(), prefix="q"),
+                "question_preview": " ".join(question.split())[:180],
+                "article_refs": sorted(signals.article_refs),
+                "document_hints": signals.document_hints,
+                "matched_entities": len(signals.matched_entity_scores),
+                "selected_mode": routing.get("resolved_mode"),
+                "preselected_mode": routing.get("preselected_mode") or routing.get("resolved_mode"),
+                "candidate_modes": [str(mode) for mode in routing.get("candidate_modes", [])],
+                "cache_hit": bool(retrieval_meta.get("cache_hit")),
+                "path_count": int(retrieval_meta.get("path_count", 0)),
+                "total_latency_ms": float(retrieval_meta.get("total_latency_ms", 0.0)),
+                "candidate_scores": candidate_summaries,
+            },
+        )
 
     def _article_hit_alignment(self, hits: list[RetrievalHit], signals: QuerySignals) -> float:
         if not hits:
@@ -919,6 +1046,22 @@ class HybridRetriever:
             signals.article_refs,
             signals.document_hints,
         )
+
+    def _entity_specificity(self, entity: dict) -> float:
+        entity_type = str(entity.get("entity_type", "")).strip().lower()
+        canonical_name = self._normalize_text(str(entity.get("canonical_name", "")))
+        tokens = self._content_tokens(canonical_name)
+        if not tokens:
+            return 0.0
+        token_count = len(tokens)
+        generic_overlap = len(tokens & GENERIC_ENTITY_TERMS)
+        specificity = min(token_count / 3, 1.0)
+        specificity -= generic_overlap * 0.18
+        if entity_type in {"article", "obligation", "risk_class"}:
+            specificity += 0.18
+        elif entity_type in {"regulation"}:
+            specificity -= 0.08
+        return max(0.0, min(specificity, 1.0))
 
     def _infer_document_hints(self, normalized_question: str) -> dict[str, float]:
         hints: dict[str, float] = {}

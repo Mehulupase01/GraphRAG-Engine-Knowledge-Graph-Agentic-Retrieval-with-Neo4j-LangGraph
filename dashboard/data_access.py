@@ -98,6 +98,19 @@ def load_path_cache_entries() -> list[dict[str, Any]]:
 
 
 @st.cache_data(ttl=10, show_spinner=False)
+def load_adaptive_route_events() -> list[dict[str, Any]]:
+    path = PROCESSED_ROOT / "analytics" / "adaptive_routes.jsonl"
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            rows.append(json.loads(line))
+    return rows
+
+
+@st.cache_data(ttl=10, show_spinner=False)
 def load_doc(path: str) -> str:
     doc_path = DOCS_ROOT / path
     if not doc_path.exists():
@@ -261,6 +274,61 @@ def path_cache_stats() -> dict[str, Any]:
         )
         if entries
         else 0.0,
+    }
+
+
+def adaptive_route_frame() -> pd.DataFrame:
+    rows = []
+    for entry in load_adaptive_route_events():
+        candidate_scores = entry.get("candidate_scores", [])
+        selected_mode = str(entry.get("selected_mode", ""))
+        selected_summary = next(
+            (
+                candidate
+                for candidate in candidate_scores
+                if isinstance(candidate, dict) and str(candidate.get("mode", "")) == selected_mode
+            ),
+            {},
+        )
+        rows.append(
+            {
+                "timestamp": entry.get("timestamp", ""),
+                "question_preview": entry.get("question_preview", ""),
+                "selected_mode": selected_mode,
+                "preselected_mode": entry.get("preselected_mode", ""),
+                "matched_entities": entry.get("matched_entities", 0),
+                "article_refs": ", ".join(entry.get("article_refs", [])[:3]),
+                "cache_hit": bool(entry.get("cache_hit", False)),
+                "path_count": entry.get("path_count", 0),
+                "latency_ms": entry.get("total_latency_ms", 0.0),
+                "selected_score": selected_summary.get("arbitration_score", 0.0),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def adaptive_route_summary() -> dict[str, Any]:
+    frame = adaptive_route_frame()
+    if frame.empty:
+        return {
+            "events": 0,
+            "selected_modes": {},
+            "cache_hit_rate": 0.0,
+            "avg_latency_ms": 0.0,
+            "preselected_match_rate": 0.0,
+        }
+    selected_modes = Counter(frame["selected_mode"].dropna().astype(str))
+    preselected_matches = (
+        (frame["selected_mode"].astype(str) == frame["preselected_mode"].astype(str)).sum()
+        if "preselected_mode" in frame.columns
+        else 0
+    )
+    return {
+        "events": int(len(frame)),
+        "selected_modes": dict(selected_modes),
+        "cache_hit_rate": round(float(frame["cache_hit"].mean()), 4) if "cache_hit" in frame.columns else 0.0,
+        "avg_latency_ms": round(float(frame["latency_ms"].mean()), 2) if "latency_ms" in frame.columns else 0.0,
+        "preselected_match_rate": round(preselected_matches / max(len(frame), 1), 4),
     }
 
 
