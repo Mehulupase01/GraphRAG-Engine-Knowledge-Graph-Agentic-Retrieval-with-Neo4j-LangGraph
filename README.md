@@ -298,6 +298,29 @@ Latest validated evaluation artifact:
 | `path_hybrid` | `0.3556` | `0.6593` | `0.3111` | `0.2407` | `0.2111` | `1798.69` | `0.0000` |
 | `baseline` | `0.3491` | `0.7148` | `0.2667` | `0.2037` | `0.2111` | `161.16` | `0.0000` |
 
+#### Visual Comparison
+
+```mermaid
+xychart-beta
+    title "Benchmark Comparison Across 54 Cases"
+    x-axis ["Average", "Faithfulness", "Context", "Relevancy", "MultiHop"]
+    y-axis "Score" 0 --> 1
+    bar "Baseline" [0.3491, 0.7148, 0.2667, 0.2037, 0.2111]
+    bar "Hybrid" [0.3658, 0.6593, 0.3000, 0.2593, 0.2444]
+    bar "PathCache" [0.3556, 0.6593, 0.3111, 0.2407, 0.2111]
+    bar "Adaptive" [0.3704, 0.6778, 0.3000, 0.2593, 0.2444]
+```
+
+#### Latency Comparison
+
+```mermaid
+xychart-beta
+    title "Average End-To-End Latency By Retrieval Mode (ms)"
+    x-axis ["Baseline", "Hybrid", "PathCache", "Adaptive", "PathHybrid"]
+    y-axis "Latency ms" 0 --> 2000
+    bar "Latency" [161.16, 181.89, 174.11, 306.18, 1798.69]
+```
+
 What these numbers mean:
 
 - `adaptive` is the best overall retrieval mode on the branch
